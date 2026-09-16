@@ -110,6 +110,19 @@
   .modal-card h2{font-family:"Poppins",sans-serif; font-size:1.2rem; font-weight:700;}
   .modal-card .input-duration{width:100%; min-width:0;}
   .modal-card-actions{display:flex; gap:8px; justify-content:flex-end;}
+  .modal-card-wide{max-width:480px;}
+  .picker-list{
+    display:flex; flex-direction:column; gap:4px; max-height:min(50vh, 400px); overflow-y:auto; padding-right:2px;
+  }
+  .picker-item{
+    display:flex; align-items:center; gap:8px; padding:8px; border-radius:8px; border:1px solid transparent;
+    background:var(--surface-2); cursor:pointer; text-align:left; width:100%; color:var(--text); font:inherit;
+  }
+  .picker-item:hover{border-color:var(--accent);}
+  .picker-item .track-info{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
+  .picker-item .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
+  .picker-item .icon-btn{pointer-events:none;}
+  .picker-empty{color:var(--text-muted); font-size:.88rem; text-align:center; padding:14px 6px;}
 
   .settings-divider{height:1px; background:var(--border); margin:2px 0;}
   .login-status{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
@@ -224,9 +237,6 @@
   }
   .input::placeholder{color:var(--text-muted);}
 
-  .add-track-row{display:flex; gap:6px; align-items:center; margin:2px 0 4px;}
-  .add-track-row select.input{flex:1; min-width:0; cursor:pointer;}
-  .add-track-row select.input:disabled{opacity:.55; cursor:not-allowed;}
   .input-duration{width:80px; flex:none; min-width:80px;}
   .field-error{color:var(--danger); font-size:.82rem; margin:0;}
   .hint{color:var(--text-muted); font-size:.78rem; margin:-4px 0 0;}
@@ -377,6 +387,17 @@
         <button type="submit" class="btn btn-accent">Toevoegen</button>
       </div>
     </form>
+  </div>
+
+  <div id="add-existing-track-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-label="Nummer toevoegen aan setlist">
+    <div class="modal-card modal-card-wide">
+      <h2>Nummer toevoegen aan setlist</h2>
+      <input type="search" class="input" id="add-existing-track-search" placeholder="Zoek nummer…" aria-label="Zoek nummer">
+      <div class="picker-list" id="add-existing-track-list"></div>
+      <div class="modal-card-actions">
+        <button type="button" class="btn btn-accent" id="add-existing-track-done-btn">Klaar</button>
+      </div>
+    </div>
   </div>
 
   <main class="layout">
@@ -1267,29 +1288,7 @@
     }).join("");
 
     if (!itemsHtml){
-      itemsHtml = '<p class="drop-hint">Sleep nummers hierheen vanuit je bibliotheek, of voeg een nummer toe via de lijst hierboven.</p>';
-    }
-
-    // Dropdown to add a track directly from within the setlist, so this
-    // works on mobile too (dragging from the library panel isn't practical
-    // on a phone).
-    var addTrackRow;
-    if (tracksMap.size === 0){
-      addTrackRow = '';
-    } else {
-      var addTrackOptions = sortedTracks().map(function(t){
-        return '<option value="' + t.id + '">' + escapeHtml(t.title) +
-          (t.artist ? ' — ' + escapeHtml(t.artist) : '') +
-          (t.genre ? ' [' + escapeHtml(t.genre) + ']' : '') +
-          ' (' + formatDuration(t.durationSec) + ')</option>';
-      }).join("");
-      addTrackRow = '' +
-        '<div class="add-track-row">' +
-          '<select id="setlist-add-track-select" class="input" aria-label="Nummer toevoegen aan deze setlist">' +
-            '<option value="">+ Nummer toevoegen aan deze setlist…</option>' +
-            addTrackOptions +
-          '</select>' +
-        '</div>';
+      itemsHtml = '<p class="drop-hint">Sleep nummers hierheen vanuit je bibliotheek, of voeg een nummer toe via de + knop hierboven.</p>';
     }
 
     editorPanelEl.innerHTML = '' +
@@ -1302,13 +1301,13 @@
             ? '<span class="badge ok">Geldige setlist</span>'
             : '<span class="badge warn">Nog ' + needed + ' ' + plural(needed,'nummer','nummers') + ' nodig (min. 3)</span>') +
           '<span class="editor-actions">' +
+            (tracksMap.size === 0 ? '' :
+              '<button type="button" class="icon-btn" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
             '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="pdf"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' PDF</button>' +
             '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="docx"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Word</button>' +
-            '<button type="button" class="btn btn-ghost btn-small" data-action="delete-active-setlist">' + ICON_TRASH + ' Verwijder setlist</button>' +
           '</span>' +
         '</div>' +
       '</div>' +
-      addTrackRow +
       '<div id="setlist-track-list">' + itemsHtml + '</div>';
   }
 
@@ -1829,6 +1828,70 @@
       }
     });
   }
+  // ---------- add-existing-track-to-setlist popup ----------
+  // Replaces the old inline dropdown: the + button in the active setlist's
+  // action row opens this list instead, so tapping a track adds it right
+  // away (works on mobile too, same reasoning as the old dropdown) while
+  // staying open so several tracks can be added in one go.
+  var addExistingTrackModalEl = document.getElementById("add-existing-track-modal");
+  var addExistingTrackSearchTerm = "";
+  function renderAddExistingTrackList(){
+    var listEl = document.getElementById("add-existing-track-list");
+    if (!listEl) return;
+    var term = addExistingTrackSearchTerm.trim().toLowerCase();
+    var items = sortedTracks().filter(function(t){
+      if (!term) return true;
+      return (t.title + " " + (t.artist||"") + " " + (t.genre||"")).toLowerCase().indexOf(term) !== -1;
+    });
+    if (items.length === 0){
+      listEl.innerHTML = '<p class="picker-empty">Geen nummers gevonden.</p>';
+      return;
+    }
+    listEl.innerHTML = items.map(function(t){
+      return '' +
+        '<button type="button" class="picker-item" data-id="' + t.id + '">' +
+          '<span class="track-info">' +
+            '<span class="track-title">' + escapeHtml(t.title) + '</span>' +
+            (t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
+          '</span>' +
+          '<span class="track-duration mono">' + formatDuration(t.durationSec) + '</span>' +
+          '<span class="icon-btn" aria-hidden="true">' + ICON_PLUS + '</span>' +
+        '</button>';
+    }).join("");
+  }
+  function openAddExistingTrackModal(){
+    if (!addExistingTrackModalEl || !activeSetlistId) return;
+    addExistingTrackSearchTerm = "";
+    var searchInput = document.getElementById("add-existing-track-search");
+    if (searchInput) searchInput.value = "";
+    renderAddExistingTrackList();
+    addExistingTrackModalEl.hidden = false;
+    if (searchInput) searchInput.focus();
+  }
+  function closeAddExistingTrackModal(){
+    if (!addExistingTrackModalEl) return;
+    addExistingTrackModalEl.hidden = true;
+  }
+  if (addExistingTrackModalEl){
+    addExistingTrackModalEl.addEventListener("click", function(e){
+      if (e.target === addExistingTrackModalEl){ closeAddExistingTrackModal(); return; }
+      if (e.target.id === "add-existing-track-done-btn"){ closeAddExistingTrackModal(); return; }
+      var item = e.target.closest && e.target.closest(".picker-item");
+      if (item && activeSetlistId){
+        var trackId = item.getAttribute("data-id");
+        mutateSetlist(activeSetlistId, function(ids){ ids.push(trackId); return ids; });
+      }
+    });
+    addExistingTrackModalEl.addEventListener("keydown", function(e){
+      if (e.key === "Escape") closeAddExistingTrackModal();
+    });
+    addExistingTrackModalEl.addEventListener("input", function(e){
+      if (e.target.id === "add-existing-track-search"){
+        addExistingTrackSearchTerm = e.target.value;
+        renderAddExistingTrackList();
+      }
+    });
+  }
   // ---------- event delegation: setlists panel ----------
   var setlistsPanel = document.getElementById("panel-setlists");
   setlistsPanel.addEventListener("dragstart", function(e){
@@ -1991,15 +2054,8 @@
       exportSetlist(activeSetlistId, exportBtn.getAttribute("data-format"));
       return;
     }
-    var delSetlistBtn = e.target.closest && e.target.closest('[data-action="delete-active-setlist"]');
-    if (delSetlistBtn){
-      var key = "setlist:" + activeSetlistId;
-      if (requestConfirm(key, renderActiveSetlist)){
-        deleteSetlist(activeSetlistId);
-      } else {
-        delSetlistBtn.textContent = "";
-        delSetlistBtn.innerHTML = ICON_TRASH + " Zeker weten?";
-      }
+    if (e.target.id === "open-add-existing-track-btn" || (e.target.closest && e.target.closest("#open-add-existing-track-btn"))){
+      openAddExistingTrackModal();
       return;
     }
   });
@@ -2015,14 +2071,6 @@
     if (e.target.id === "setlist-name-input" && e.key === "Enter"){
       e.preventDefault();
       e.target.blur();
-    }
-  });
-  editorPanelEl.addEventListener("change", function(e){
-    if (e.target.id === "setlist-add-track-select" && activeSetlistId){
-      var trackId = e.target.value;
-      if (!trackId) return;
-      mutateSetlist(activeSetlistId, function(ids){ ids.push(trackId); return ids; });
-      e.target.value = "";
     }
   });
 
