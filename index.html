@@ -191,6 +191,8 @@ img{max-width:100%;}
     html, body{height:100%;}
     body{display:flex; flex-direction:column;}
     .app{display:flex; flex-direction:column; flex:1; min-height:0;}
+    .topbar{flex:none;}
+    #settings-panel{flex:none; max-height:60vh; overflow-y:auto;}
     .layout{flex:1; min-height:0; grid-template-rows:minmax(0,1fr); align-items:stretch;}
     .panel{height:100%;}
     .library-list, .setlists-list{flex:1; min-height:0; max-height:none; overflow-y:auto;}
@@ -279,7 +281,10 @@ img{max-width:100%;}
   .track-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
   .track-artist{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; color:var(--text-muted); font-weight:400;}
   .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
-  .track-item .track-duration, .track-item .track-programma{color:var(--text); font-size:1.05rem; font-weight:700;}
+  .track-item .track-duration, .track-item .track-programma,
+  .setlist-track-item .track-duration, .setlist-track-item .track-programma{
+    color:var(--text); font-size:1.05rem; font-weight:700;
+  }
   .track-programma{color:var(--text-muted); font-size:.88rem; flex:none;}
 
   .library-filters{display:flex; gap:6px;}
@@ -374,7 +379,7 @@ img{max-width:100%;}
   .setlist-track-item:active{cursor:grabbing;}
   .setlist-track-item.dragging{opacity:.4;}
   .setlist-track-item.missing{border-style:dashed; color:var(--text-muted);}
-  .track-position{width:22px; text-align:right; color:var(--text-muted); font-size:.85rem; flex:none;}
+  .track-position{width:22px; text-align:right; color:var(--text); font-size:1.05rem; font-weight:700; flex:none;}
   .track-reorder{display:flex; flex-direction:column; flex:none;}
   .track-reorder .icon-btn{width:22px; height:18px;}
   .track-reorder svg{width:12px; height:12px;}
@@ -1514,7 +1519,7 @@ img{max-width:100%;}
           (manual ? '<span class="drag-handle" aria-hidden="true">' + ICON_HANDLE + '</span>' : '') +
           '<span class="setlist-row-main">' +
             '<span class="setlist-row-name">' + escapeHtml(sl.name) + '</span>' +
-            '<span class="setlist-row-meta">' + count + ' ' + plural(count,'nummer','nummers') + ' · ' + formatDuration(totalDurationFor(sl)) + (sl.date ? ' · ' + formatDateNl(sl.date) : '') + '</span>' +
+            '<span class="setlist-row-meta">' + (sl.date ? formatDateNl(sl.date) + ' · ' : '') + count + ' ' + plural(count,'nummer','nummers') + ' · ' + formatDuration(totalDurationFor(sl)) + '</span>' +
           '</span>' +
           '<button type="button" class="icon-btn" data-action="rename-setlist" data-id="' + sl.id + '" aria-label="Naam wijzigen" title="Naam wijzigen">' + ICON_PENCIL + '</button>' +
           '<button type="button" class="icon-btn danger' + (confirming ? ' confirming' : '') + '" data-action="delete-setlist" data-id="' + sl.id + '" aria-label="' + (confirming ? "Klik nogmaals om te bevestigen" : "Setlist verwijderen") + '" title="Verwijderen">' + ICON_TRASH + '</button>' +
@@ -1550,6 +1555,7 @@ img{max-width:100%;}
             '<span class="track-title">' + (missing ? '(verwijderd nummer)' : escapeHtml(t.title)) + '</span>' +
             (!missing && t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
           '</span>' +
+          (!missing && t.programma ? '<span class="track-programma mono" title="Programma">' + escapeHtml(t.programma) + '</span>' : '') +
           '<span class="track-duration mono">' + formatDuration(missing ? 0 : t.durationSec) + '</span>' +
           '<span class="track-reorder">' +
             '<button type="button" class="icon-btn" data-action="move-up" data-index="' + idx + '" aria-label="Omhoog verplaatsen"' + (idx===0?' disabled':'') + '>' + ICON_UP + '</button>' +
