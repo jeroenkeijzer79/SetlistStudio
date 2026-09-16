@@ -279,11 +279,8 @@ img{max-width:100%;}
   .track-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
   .track-artist{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; color:var(--text-muted); font-weight:400;}
   .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
-  .track-item .track-duration{font-size:1.05rem; font-weight:700;}
-  .track-programma{
-    color:var(--text-muted); font-size:.76rem; flex:none; padding:2px 7px; border:1px solid var(--border);
-    border-radius:999px;
-  }
+  .track-item .track-duration, .track-item .track-programma{color:var(--text); font-size:1.05rem; font-weight:700;}
+  .track-programma{color:var(--text-muted); font-size:.88rem; flex:none;}
 
   .library-filters{display:flex; gap:6px;}
   .library-filters .input{flex:1; min-width:0;}
@@ -1569,8 +1566,8 @@ img{max-width:100%;}
     editorPanelEl.innerHTML = '' +
       '<div class="editor-header">' +
         '<input type="text" id="setlist-name-input" value="' + escapeHtml(sl.name) + '" aria-label="Naam van de setlist">' +
-        '<input type="date" id="setlist-date-input" value="' + escapeHtml(sl.date || "") + '" aria-label="Datum van de setlist">' +
         '<div class="editor-stats">' +
+          '<input type="date" id="setlist-date-input" value="' + escapeHtml(sl.date || "") + '" aria-label="Datum van de setlist">' +
           '<span class="badge">' + count + ' ' + plural(count,'nummer','nummers') + '</span>' +
           '<span class="badge badge-duration">' + formatDuration(total) + '</span>' +
           (valid
