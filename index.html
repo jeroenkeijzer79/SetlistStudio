@@ -96,6 +96,19 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .auth-gate-card h2{font-family:"Poppins",sans-serif; font-size:1.2rem; font-weight:700;}
   .auth-gate-card .hint{margin:-4px 0 0;}
 
+  .modal-overlay{
+    position:fixed; inset:0; z-index:900; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--bg) 80%, black); padding:16px;
+  }
+  .modal-card{
+    display:flex; flex-direction:column; gap:12px; width:100%; max-width:420px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:24px;
+  }
+  .modal-card h2{font-family:"Poppins",sans-serif; font-size:1.2rem; font-weight:700;}
+  .modal-card .input-duration{width:100%; min-width:0;}
+  .modal-card-actions{display:flex; gap:8px; justify-content:flex-end;}
+
   .settings-divider{height:1px; background:var(--border); margin:2px 0;}
   .login-status{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
   .login-form{display:flex; gap:6px; flex-wrap:wrap;}
@@ -183,9 +196,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   }
   .input::placeholder{color:var(--text-muted);}
 
-  .add-track-form{display:flex; gap:6px; flex-wrap:wrap;}
-  .add-track-form .input{flex:1; min-width:120px;}
-
   .add-track-row{display:flex; gap:6px; align-items:center; margin:2px 0 4px;}
   .add-track-row select.input{flex:1; min-width:0; cursor:pointer;}
   .add-track-row select.input:disabled{opacity:.55; cursor:not-allowed;}
@@ -213,11 +223,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .track-info{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
   .track-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
   .track-artist{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; color:var(--text-muted); font-weight:400;}
-  .track-genre{
-    align-self:flex-start; display:inline-flex; align-items:center; margin-top:2px; padding:1px 8px;
-    border-radius:999px; font-size:.7rem; font-weight:600; color:var(--text-muted);
-    border:1px solid var(--border); background:var(--surface-2); white-space:nowrap;
-  }
   .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
 
   .library-filters{display:flex; gap:6px;}
@@ -328,6 +333,21 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     </form>
   </div>
 
+  <div id="add-track-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-label="Nummer toevoegen">
+    <form id="add-track-form" class="modal-card">
+      <h2>Nummer toevoegen</h2>
+      <input type="text" class="input" id="new-track-title" placeholder="Titel" aria-label="Titel van nieuw nummer" required>
+      <input type="text" class="input" id="new-track-artist" placeholder="Artiest (optioneel)" aria-label="Oorspronkelijke artiest">
+      <input type="text" class="input" id="new-track-genre" placeholder="Genre (optioneel)" aria-label="Genre" list="genre-datalist">
+      <input type="text" class="input input-duration mono" id="new-track-duration" placeholder="mm:ss" aria-label="Duur (mm:ss)" required>
+      <p class="field-error" id="add-track-error" hidden></p>
+      <div class="modal-card-actions">
+        <button type="button" class="btn btn-ghost" id="add-track-cancel-btn">Annuleren</button>
+        <button type="submit" class="btn btn-accent">Toevoegen</button>
+      </div>
+    </form>
+  </div>
+
   <main class="layout">
     <section class="panel panel-library" aria-label="Bibliotheek" id="panel-library">
       <div class="panel-header">
@@ -347,17 +367,11 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         </select>
       </div>
 
-      <form id="add-track-form" class="add-track-form">
-        <input type="text" class="input" id="new-track-title" placeholder="Titel" aria-label="Titel van nieuw nummer" required>
-        <input type="text" class="input" id="new-track-artist" placeholder="Artiest (optioneel)" aria-label="Oorspronkelijke artiest">
-        <input type="text" class="input" id="new-track-genre" placeholder="Genre (optioneel)" aria-label="Genre" list="genre-datalist">
-        <input type="text" class="input input-duration mono" id="new-track-duration" placeholder="mm:ss" aria-label="Duur (mm:ss)" required>
-        <button type="submit" class="btn btn-accent" aria-label="Nummer toevoegen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-      </form>
+      <button type="button" class="btn btn-accent" id="open-add-track-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Nummer toevoegen
+      </button>
       <datalist id="genre-datalist"></datalist>
-      <p class="field-error" id="add-track-error" hidden></p>
 
       <div class="library-list" id="library-list"></div>
     </section>
@@ -1085,7 +1099,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
           '<span class="track-info">' +
             '<span class="track-title">' + escapeHtml(t.title) + '</span>' +
             (t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
-            (t.genre ? '<span class="track-genre">' + escapeHtml(t.genre) + '</span>' : '') +
           '</span>' +
           '<span class="track-duration mono">' + formatDuration(t.durationSec) + '</span>' +
           '<button type="button" class="icon-btn" data-action="edit-track" data-id="' + t.id + '" aria-label="Nummer bewerken" title="Bewerken">' + ICON_PENCIL + '</button>' +
@@ -1173,7 +1186,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
           '<span class="track-info">' +
             '<span class="track-title">' + (missing ? '(verwijderd nummer)' : escapeHtml(t.title)) + '</span>' +
             (!missing && t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
-            (!missing && t.genre ? '<span class="track-genre">' + escapeHtml(t.genre) + '</span>' : '') +
           '</span>' +
           '<span class="track-duration mono">' + formatDuration(missing ? 0 : t.durationSec) + '</span>' +
           '<span class="track-reorder">' +
@@ -1674,6 +1686,10 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     }
     if (e.target.id === "upload-btn" || (e.target.closest && e.target.closest("#upload-btn"))){
       document.getElementById("file-input").click();
+      return;
+    }
+    if (e.target.id === "open-add-track-btn" || (e.target.closest && e.target.closest("#open-add-track-btn"))){
+      openAddTrackModal();
     }
   });
   function commitTrackEdit(id){
@@ -1716,26 +1732,54 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       renderLibrary();
     }
   });
-  libraryPanel.addEventListener("submit", function(e){
-    if (e.target.id === "add-track-form"){
-      e.preventDefault();
-      var titleInput = document.getElementById("new-track-title");
-      var artistInput = document.getElementById("new-track-artist");
-      var genreInput = document.getElementById("new-track-genre");
-      var durInput = document.getElementById("new-track-duration");
-      var errorEl = document.getElementById("add-track-error");
-      var title = titleInput.value.trim();
-      var artist = artistInput.value.trim();
-      var genre = genreInput.value.trim();
-      var dur = parseDuration(durInput.value);
-      if (!title){ errorEl.textContent = "Vul een titel in."; errorEl.hidden = false; return; }
-      if (dur == null){ errorEl.textContent = "Gebruik het formaat mm:ss, bijvoorbeeld 3:45."; errorEl.hidden = false; return; }
-      errorEl.hidden = true;
-      addTrack(title, artist, dur, genre);
-      titleInput.value = ""; artistInput.value = ""; genreInput.value = ""; durInput.value = "";
-      titleInput.focus();
-    }
-  });
+  // ---------- add-track popup ----------
+  var addTrackModalEl = document.getElementById("add-track-modal");
+  function openAddTrackModal(){
+    if (!addTrackModalEl) return;
+    var errorEl = document.getElementById("add-track-error");
+    if (errorEl) errorEl.hidden = true;
+    addTrackModalEl.hidden = false;
+    var ti = document.getElementById("new-track-title");
+    if (ti) ti.focus();
+  }
+  function closeAddTrackModal(){
+    if (!addTrackModalEl) return;
+    addTrackModalEl.hidden = true;
+    var form = document.getElementById("add-track-form");
+    if (form) form.reset();
+    var errorEl = document.getElementById("add-track-error");
+    if (errorEl) errorEl.hidden = true;
+  }
+  if (addTrackModalEl){
+    addTrackModalEl.addEventListener("click", function(e){
+      if (e.target === addTrackModalEl) closeAddTrackModal();
+    });
+    addTrackModalEl.addEventListener("keydown", function(e){
+      if (e.key === "Escape") closeAddTrackModal();
+    });
+    addTrackModalEl.addEventListener("click", function(e){
+      if (e.target.id === "add-track-cancel-btn") closeAddTrackModal();
+    });
+    addTrackModalEl.addEventListener("submit", function(e){
+      if (e.target.id === "add-track-form"){
+        e.preventDefault();
+        var titleInput = document.getElementById("new-track-title");
+        var artistInput = document.getElementById("new-track-artist");
+        var genreInput = document.getElementById("new-track-genre");
+        var durInput = document.getElementById("new-track-duration");
+        var errorEl = document.getElementById("add-track-error");
+        var title = titleInput.value.trim();
+        var artist = artistInput.value.trim();
+        var genre = genreInput.value.trim();
+        var dur = parseDuration(durInput.value);
+        if (!title){ errorEl.textContent = "Vul een titel in."; errorEl.hidden = false; titleInput.focus(); return; }
+        if (dur == null){ errorEl.textContent = "Gebruik het formaat mm:ss, bijvoorbeeld 3:45."; errorEl.hidden = false; durInput.focus(); return; }
+        errorEl.hidden = true;
+        addTrack(title, artist, dur, genre);
+        closeAddTrackModal();
+      }
+    });
+  }
   libraryPanel.addEventListener("change", function(e){
     if (e.target.id === "file-input"){
       var file = e.target.files && e.target.files[0];
