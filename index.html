@@ -6,11 +6,7 @@
 <title>Jeroen & Irene - Setlist Studio</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-  /* base reset (normally supplied by the Claude Artifact skeleton;
-     needed here for a plain standalone host like GitHub Pages) */
-  html,body{margin:0;}
-  img{max-width:100%;}
-  [hidden]{display:none!important;}
+html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
 
   /*
     Palette lifted from jeroenirene.nl: near-black stage backdrop, warm
@@ -386,6 +382,22 @@
   var STORAGE_KEY_SETLISTS = "setlist-studio:setlists";
   var FIREBASE_CONFIG_KEY = "setlist-studio:firebase-config";
   var PENDING_MIGRATION_KEY = "setlist-studio:pending-migration";
+  // Baked-in project so cloud sync works for every visitor out of the box,
+  // with no per-device setup. A visitor can still override it with their own
+  // project below, or turn cloud sync off entirely on their device — that
+  // choice is stored under FIREBASE_CONFIG_KEY as the literal string
+  // "disabled", which resolveFirebaseConfig() treats as distinct from "no
+  // override configured yet" so switching it off doesn't just fall straight
+  // back to this same default.
+  var DEFAULT_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDBa9pD6xCjtjxYOoxcdK8Feor2rV-0_U4",
+    authDomain: "setliststudio-d2ab1.firebaseapp.com",
+    projectId: "setliststudio-d2ab1",
+    storageBucket: "setliststudio-d2ab1.firebasestorage.app",
+    messagingSenderId: "277799225691",
+    appId: "1:277799225691:web:11626315899993590bf27e",
+    measurementId: "G-PVSDB64C41"
+  };
   var librarySearchTerm = "";
   var editingTrackId = null;
   var creatingSetlist = false;
@@ -464,14 +476,24 @@
   // function below (addTrack, mutateSetlist, ...) works unchanged for
   // either remote backend; only initStore() needs to know which one it is.
   var storeMode = "memory"; // "claude" | "cloud" | "local" | "memory"
+  var firebaseConfigSource = null; // "default" | "custom" | null
 
-  function loadFirebaseConfig(){
-    try{
-      var raw = window.localStorage.getItem(FIREBASE_CONFIG_KEY);
-      if (!raw) return null;
-      var obj = JSON.parse(raw);
-      if (obj && obj.apiKey && obj.projectId) return obj;
-    } catch(e){ /* ignore */ }
+  // Tri-state resolution of which Firebase project (if any) this device
+  // should use: an explicit "disabled" marker wins (the visitor turned
+  // cloud sync off here), then a per-device custom override, then the
+  // built-in default so it works for everyone with zero setup.
+  function resolveFirebaseConfig(){
+    var raw = null;
+    try{ raw = window.localStorage.getItem(FIREBASE_CONFIG_KEY); } catch(e){ /* ignore */ }
+    if (raw === "disabled"){ firebaseConfigSource = null; return null; }
+    if (raw){
+      try{
+        var obj = JSON.parse(raw);
+        if (obj && obj.apiKey && obj.projectId){ firebaseConfigSource = "custom"; return obj; }
+      } catch(e){ /* ignore, fall through to default */ }
+    }
+    if (DEFAULT_FIREBASE_CONFIG){ firebaseConfigSource = "default"; return DEFAULT_FIREBASE_CONFIG; }
+    firebaseConfigSource = null;
     return null;
   }
   function saveFirebaseConfig(cfg){
@@ -479,6 +501,9 @@
   }
   function clearFirebaseConfig(){
     try{ window.localStorage.removeItem(FIREBASE_CONFIG_KEY); } catch(e){ /* ignore */ }
+  }
+  function disableFirebaseConfig(){
+    try{ window.localStorage.setItem(FIREBASE_CONFIG_KEY, "disabled"); } catch(e){ /* ignore */ }
   }
   // Accepts either the raw `const firebaseConfig = {...};` snippet Firebase
   // shows in its console, or plain JSON.
@@ -505,10 +530,29 @@
       return;
     }
     if (storeMode === "cloud"){
+      var statusMsg = firebaseConfigSource === "default"
+        ? "Verbonden met cloud-synchronisatie (automatisch, via de ingebouwde configuratie van deze site). Iedereen die deze pagina opent, ziet en bewerkt dezelfde bibliotheek en setlists — zonder dat ze zelf iets hoeven in te stellen."
+        : "Verbonden met cloud-synchronisatie via je eigen configuratie. Iedereen die deze pagina met dezelfde configuratie opent, ziet en bewerkt dezelfde bibliotheek en setlists.";
       panel.innerHTML = '' +
         '<div class="settings-body">' +
-          '<p class="settings-status">Verbonden met cloud-synchronisatie. Iedereen die deze pagina met dezelfde configuratie opent, ziet en bewerkt dezelfde bibliotheek en setlists.</p>' +
-          '<button type="button" class="btn btn-ghost btn-small" id="disconnect-cloud-btn">Loskoppelen</button>' +
+          '<p class="settings-status">' + statusMsg + '</p>' +
+          '<button type="button" class="btn btn-ghost btn-small" id="disconnect-cloud-btn">Loskoppelen op dit apparaat</button>' +
+          (firebaseConfigSource === "default" ? '' :
+            '<details class="settings-help"><summary>Eigen configuratie wijzigen</summary>' +
+              '<textarea id="firebase-config-input" class="input" rows="5" placeholder="const firebaseConfig = { apiKey: &quot;...&quot;, projectId: &quot;...&quot;, ... };"></textarea>' +
+              '<p class="field-error" id="firebase-config-error" hidden></p>' +
+              '<button type="button" class="btn btn-accent btn-small" id="connect-cloud-btn">Verbinden</button>' +
+            '</details>') +
+        '</div>';
+      return;
+    }
+    var disabledHere = false;
+    try{ disabledHere = window.localStorage.getItem(FIREBASE_CONFIG_KEY) === "disabled"; } catch(e){ /* ignore */ }
+    if (disabledHere && DEFAULT_FIREBASE_CONFIG){
+      panel.innerHTML = '' +
+        '<div class="settings-body">' +
+          '<p>Cloud-synchronisatie staat op dit apparaat uit. De bibliotheek en setlists worden hier lokaal bewaard en niet gedeeld.</p>' +
+          '<button type="button" class="btn btn-accent btn-small" id="reenable-cloud-btn">Cloud-synchronisatie weer inschakelen</button>' +
         '</div>';
       return;
     }
@@ -547,6 +591,13 @@
     window.location.reload();
   }
   function handleDisconnectFirebase(){
+    // Explicitly marks this device as opted out, rather than just clearing
+    // the override — otherwise, with a built-in default configured, the
+    // page would immediately reconnect to that same default on reload.
+    disableFirebaseConfig();
+    window.location.reload();
+  }
+  function handleReenableFirebase(){
     clearFirebaseConfig();
     window.location.reload();
   }
@@ -635,17 +686,22 @@
       return;
     }
 
-    // 2. A self-configured Firebase project, for sharing/collaboration
-    //    when hosted outside Claude (e.g. GitHub Pages) — see the
-    //    settings panel (gear icon).
-    var fbConfig = loadFirebaseConfig();
+    // 2. A Firebase project — either the site's built-in default (so cloud
+    //    sync works for every visitor automatically) or a per-device custom
+    //    override — for sharing/collaboration when hosted outside Claude
+    //    (e.g. GitHub Pages). See the settings panel (gear icon).
+    var fbConfig = resolveFirebaseConfig();
     if (fbConfig){
       try{
         db = await initFirebase(fbConfig);
         usingDb = true; storeMode = "cloud";
         subscribeRemote();
         maybeMigratePendingData();
-        showBanner("Verbonden met cloud-synchronisatie — wijzigingen zijn direct zichtbaar voor iedereen met deze configuratie.", "success");
+        if (firebaseConfigSource === "default"){
+          showBanner("Verbonden met cloud-synchronisatie — je bibliotheek en setlists worden automatisch gedeeld met iedereen die deze pagina opent.", "success");
+        } else {
+          showBanner("Verbonden met cloud-synchronisatie — wijzigingen zijn direct zichtbaar voor iedereen met deze configuratie.", "success");
+        }
         renderSettingsPanel();
         return;
       } catch(e){
@@ -1685,6 +1741,7 @@
     settingsPanelEl.addEventListener("click", function(e){
       if (e.target.id === "connect-cloud-btn"){ handleConnectFirebase(); return; }
       if (e.target.id === "disconnect-cloud-btn"){ handleDisconnectFirebase(); return; }
+      if (e.target.id === "reenable-cloud-btn"){ handleReenableFirebase(); return; }
     });
   }
 
@@ -1693,5 +1750,6 @@
   initStore();
 })();
 </script>
+
 </body>
 </html>
