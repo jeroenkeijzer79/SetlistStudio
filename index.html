@@ -156,6 +156,10 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
 
   .add-track-form{display:flex; gap:6px; flex-wrap:wrap;}
   .add-track-form .input{flex:1; min-width:120px;}
+
+  .add-track-row{display:flex; gap:6px; align-items:center; margin:2px 0 4px;}
+  .add-track-row select.input{flex:1; min-width:0; cursor:pointer;}
+  .add-track-row select.input:disabled{opacity:.55; cursor:not-allowed;}
   .input-duration{width:80px; flex:none; min-width:80px;}
   .field-error{color:var(--danger); font-size:.82rem; margin:0;}
   .hint{color:var(--text-muted); font-size:.78rem; margin:-4px 0 0;}
@@ -697,11 +701,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         usingDb = true; storeMode = "cloud";
         subscribeRemote();
         maybeMigratePendingData();
-        if (firebaseConfigSource === "default"){
-          showBanner("Verbonden met cloud-synchronisatie — je bibliotheek en setlists worden automatisch gedeeld met iedereen die deze pagina opent.", "success");
-        } else {
-          showBanner("Verbonden met cloud-synchronisatie — wijzigingen zijn direct zichtbaar voor iedereen met deze configuratie.", "success");
-        }
         renderSettingsPanel();
         return;
       } catch(e){
@@ -967,7 +966,28 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     }).join("");
 
     if (!itemsHtml){
-      itemsHtml = '<p class="drop-hint">Sleep nummers hierheen vanuit je bibliotheek, of klik op de + knop bij een nummer.</p>';
+      itemsHtml = '<p class="drop-hint">Sleep nummers hierheen vanuit je bibliotheek, of voeg een nummer toe via de lijst hierboven.</p>';
+    }
+
+    // Dropdown to add a track directly from within the setlist, so this
+    // works on mobile too (dragging from the library panel isn't practical
+    // on a phone).
+    var addTrackRow;
+    if (tracksMap.size === 0){
+      addTrackRow = '';
+    } else {
+      var addTrackOptions = sortedTracks().map(function(t){
+        return '<option value="' + t.id + '">' + escapeHtml(t.title) +
+          (t.artist ? ' — ' + escapeHtml(t.artist) : '') +
+          ' (' + formatDuration(t.durationSec) + ')</option>';
+      }).join("");
+      addTrackRow = '' +
+        '<div class="add-track-row">' +
+          '<select id="setlist-add-track-select" class="input" aria-label="Nummer toevoegen aan deze setlist">' +
+            '<option value="">+ Nummer toevoegen aan deze setlist…</option>' +
+            addTrackOptions +
+          '</select>' +
+        '</div>';
     }
 
     editorPanelEl.innerHTML = '' +
@@ -987,6 +1007,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
           '</span>' +
         '</div>' +
       '</div>' +
+      addTrackRow +
       '<div id="setlist-track-list">' + itemsHtml + '</div>';
   }
 
@@ -1630,6 +1651,14 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     if (e.target.id === "setlist-name-input" && e.key === "Enter"){
       e.preventDefault();
       e.target.blur();
+    }
+  });
+  editorPanelEl.addEventListener("change", function(e){
+    if (e.target.id === "setlist-add-track-select" && activeSetlistId){
+      var trackId = e.target.value;
+      if (!trackId) return;
+      mutateSetlist(activeSetlistId, function(ids){ ids.push(trackId); return ids; });
+      e.target.value = "";
     }
   });
 
