@@ -228,6 +228,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .library-filters{display:flex; gap:6px;}
   .library-filters .input{flex:1; min-width:0;}
   #library-genre-filter{flex:0 0 auto; width:auto; max-width:44%; cursor:pointer;}
+  #open-add-track-btn{flex:none; padding:8px 10px;}
+  #open-add-track-btn svg{width:16px; height:16px;}
 
   .empty-state{
     text-align:center; padding:26px 12px; color:var(--text-muted); font-size:.9rem;
@@ -365,12 +367,10 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         <select id="library-genre-filter" class="input" aria-label="Filter op genre">
           <option value="">Alle genres</option>
         </select>
+        <button type="button" class="btn btn-accent" id="open-add-track-btn" aria-label="Nummer toevoegen" title="Nummer toevoegen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
       </div>
-
-      <button type="button" class="btn btn-accent" id="open-add-track-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        Nummer toevoegen
-      </button>
       <datalist id="genre-datalist"></datalist>
 
       <div class="library-list" id="library-list"></div>
@@ -387,6 +387,15 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         </button>
       </div>
       <div id="new-setlist-form-slot"></div>
+      <select id="setlists-sort" class="input" aria-label="Setlists sorteren">
+        <option value="created">Volgorde van aanmaken</option>
+        <option value="name-asc">Naam (A-Z)</option>
+        <option value="name-desc">Naam (Z-A)</option>
+        <option value="duration-asc">Duur (kort → lang)</option>
+        <option value="duration-desc">Duur (lang → kort)</option>
+        <option value="count-desc">Aantal nummers (meer → minder)</option>
+        <option value="count-asc">Aantal nummers (minder → meer)</option>
+      </select>
       <div class="setlists-list" id="setlists-list"></div>
     </section>
 
@@ -482,6 +491,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   };
   var librarySearchTerm = "";
   var libraryGenreFilter = "";
+  var SETLISTS_SORT_KEY = "setlist-studio:setlists-sort";
+  var setlistsSortMode = "created";
+  try{
+    var storedSort = window.localStorage.getItem(SETLISTS_SORT_KEY);
+    if (storedSort) setlistsSortMode = storedSort;
+  } catch(e){ /* ignore */ }
   var editingTrackId = null;
   var creatingSetlist = false;
   var renamingSetlistId = null;
@@ -1126,10 +1141,28 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     if (input){ input.focus(); input.select(); }
   }
 
+  function sortSetlists(items){
+    var byName = function(a,b){ return a.name.localeCompare(b.name, "nl", {sensitivity:"base"}); };
+    var byDuration = function(a,b){ return totalDurationFor(a) - totalDurationFor(b); };
+    var byCount = function(a,b){ return a.trackIds.length - b.trackIds.length; };
+    var byCreated = function(a,b){ return (a.createdAt||0) - (b.createdAt||0); };
+    switch (setlistsSortMode){
+      case "name-asc": return items.sort(byName);
+      case "name-desc": return items.sort(function(a,b){ return byName(b,a); });
+      case "duration-asc": return items.sort(byDuration);
+      case "duration-desc": return items.sort(function(a,b){ return byDuration(b,a); });
+      case "count-asc": return items.sort(byCount);
+      case "count-desc": return items.sort(function(a,b){ return byCount(b,a); });
+      default: return items.sort(byCreated);
+    }
+  }
+
   function renderSetlistsList(){
     if (renamingSetlistId && !setlistsMap.has(renamingSetlistId)) renamingSetlistId = null;
     renderNewSetlistForm();
-    var items = Array.from(setlistsMap.values()).sort(function(a,b){ return (a.createdAt||0) - (b.createdAt||0); });
+    var sortSelect = document.getElementById("setlists-sort");
+    if (sortSelect) sortSelect.value = setlistsSortMode;
+    var items = sortSetlists(Array.from(setlistsMap.values()));
     if (items.length === 0){
       setlistsListEl.innerHTML = '<div class="empty-state"><strong>Nog geen setlists</strong>Klik op “Nieuw” om je eerste setlist te maken.</div>';
       return;
@@ -1790,6 +1823,13 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
 
   // ---------- event delegation: setlists panel ----------
   var setlistsPanel = document.getElementById("panel-setlists");
+  setlistsPanel.addEventListener("change", function(e){
+    if (e.target.id === "setlists-sort"){
+      setlistsSortMode = e.target.value;
+      try{ window.localStorage.setItem(SETLISTS_SORT_KEY, setlistsSortMode); } catch(err){ /* ignore */ }
+      renderSetlistsList();
+    }
+  });
   setlistsPanel.addEventListener("click", function(e){
     if (e.target.id === "new-setlist-btn" || (e.target.closest && e.target.closest("#new-setlist-btn"))){
       creatingSetlist = true;
