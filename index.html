@@ -242,6 +242,9 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     border:1px solid var(--border); background:var(--surface-2); cursor:pointer; text-align:left;
   }
   .setlist-row.active{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, var(--surface-2));}
+  .setlist-row.manual{cursor:grab;}
+  .setlist-row.manual:active{cursor:grabbing;}
+  .setlist-row.dragging{opacity:.4;}
   .setlist-rename-input{flex:1; min-width:0;}
   .status-dot{width:9px; height:9px; border-radius:50%; flex:none; background:var(--warn);}
   .status-dot.ok{background:var(--success);}
@@ -388,6 +391,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       </div>
       <div id="new-setlist-form-slot"></div>
       <select id="setlists-sort" class="input" aria-label="Setlists sorteren">
+        <option value="manual">Handmatig (slepen)</option>
         <option value="created">Volgorde van aanmaken</option>
         <option value="name-asc">Naam (A-Z)</option>
         <option value="name-desc">Naam (Z-A)</option>
@@ -993,7 +997,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   }
 
   async function createSetlist(name){
-    var data = {name: name, trackIds: [], createdAt: Date.now(), updatedAt: Date.now()};
+    var data = {name: name, trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
     if (usingDb){
       var ref = await db.collection("setlists").add(data);
       activeSetlistId = ref.id;
@@ -1146,7 +1150,13 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     var byDuration = function(a,b){ return totalDurationFor(a) - totalDurationFor(b); };
     var byCount = function(a,b){ return a.trackIds.length - b.trackIds.length; };
     var byCreated = function(a,b){ return (a.createdAt||0) - (b.createdAt||0); };
+    var byManual = function(a,b){
+      var av = typeof a.sortIndex === "number" ? a.sortIndex : (a.createdAt||0);
+      var bv = typeof b.sortIndex === "number" ? b.sortIndex : (b.createdAt||0);
+      return av - bv;
+    };
     switch (setlistsSortMode){
+      case "manual": return items.sort(byManual);
       case "name-asc": return items.sort(byName);
       case "name-desc": return items.sort(function(a,b){ return byName(b,a); });
       case "duration-asc": return items.sort(byDuration);
@@ -1154,6 +1164,24 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       case "count-asc": return items.sort(byCount);
       case "count-desc": return items.sort(function(a,b){ return byCount(b,a); });
       default: return items.sort(byCreated);
+    }
+  }
+
+  // Rewrites sortIndex sequentially for every setlist in the given final
+  // order, so the manual arrangement persists (shared, when using a
+  // remote store) rather than being a purely local/visual reorder.
+  async function reorderSetlistsManual(orderedIds){
+    if (usingDb){
+      await Promise.all(orderedIds.map(function(id, i){
+        return db.collection("setlists").doc(id).update({sortIndex: i});
+      }));
+    } else {
+      orderedIds.forEach(function(id, i){
+        var sl = setlistsMap.get(id);
+        if (sl) sl.sortIndex = i;
+      });
+      persistLocal();
+      renderSetlistsList();
     }
   }
 
@@ -1180,8 +1208,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       }
       var key = "setlist:" + sl.id;
       var confirming = pendingConfirm.has(key);
+      var manual = setlistsSortMode === "manual";
       return '' +
-        '<div class="setlist-row' + (sl.id === activeSetlistId ? ' active' : '') + '" data-action="select-setlist" data-id="' + sl.id + '" role="button" tabindex="0">' +
+        '<div class="setlist-row' + (sl.id === activeSetlistId ? ' active' : '') + (manual ? ' manual' : '') + '"' +
+          (manual ? ' draggable="true"' : '') +
+          ' data-action="select-setlist" data-id="' + sl.id + '" role="button" tabindex="0">' +
+          (manual ? '<span class="drag-handle" aria-hidden="true">' + ICON_HANDLE + '</span>' : '') +
           '<span class="status-dot ' + (count >= 3 ? 'ok' : '') + '"></span>' +
           '<span class="setlist-row-main">' +
             '<span class="setlist-row-name">' + escapeHtml(sl.name) + '</span>' +
@@ -1603,8 +1635,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   }
 
   // ---------- drag & drop ----------
-  function getDropIndex(container, clientY, excludeEl){
-    var items = Array.prototype.slice.call(container.querySelectorAll(".setlist-track-item")).filter(function(el){ return el !== excludeEl; });
+  function getDropIndex(container, clientY, excludeEl, itemSelector){
+    var items = Array.prototype.slice.call(container.querySelectorAll(itemSelector || ".setlist-track-item")).filter(function(el){ return el !== excludeEl; });
     for (var i=0;i<items.length;i++){
       var rect = items[i].getBoundingClientRect();
       var mid = rect.top + rect.height/2;
@@ -1829,6 +1861,56 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       try{ window.localStorage.setItem(SETLISTS_SORT_KEY, setlistsSortMode); } catch(err){ /* ignore */ }
       renderSetlistsList();
     }
+  });
+  setlistsPanel.addEventListener("dragstart", function(e){
+    var item = e.target.closest ? e.target.closest(".setlist-row") : null;
+    if (!item || setlistsSortMode !== "manual") return;
+    item.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/x-setlist-reorder", item.getAttribute("data-id"));
+  });
+  setlistsPanel.addEventListener("dragend", function(e){
+    var item = e.target.closest ? e.target.closest(".setlist-row") : null;
+    if (item) item.classList.remove("dragging");
+    if (dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
+  });
+  setlistsPanel.addEventListener("dragover", function(e){
+    if (setlistsSortMode !== "manual") return;
+    var listEl = setlistsListEl;
+    var types = e.dataTransfer.types;
+    var hasReorder = Array.prototype.indexOf.call(types, "application/x-setlist-reorder") !== -1;
+    if (!hasReorder || !listEl) return;
+    var within = listEl.contains(e.target) || e.target === listEl;
+    if (!within) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    var dragging = listEl.querySelector(".dragging");
+    var idx = getDropIndex(listEl, e.clientY, dragging, ".setlist-row");
+    var items = Array.prototype.slice.call(listEl.querySelectorAll(".setlist-row")).filter(function(el){ return el !== dragging; });
+    var ref = items[idx] || null;
+    listEl.insertBefore(dropIndicator, ref);
+  });
+  setlistsPanel.addEventListener("drop", function(e){
+    if (setlistsSortMode !== "manual") return;
+    var listEl = setlistsListEl;
+    if (!listEl) return;
+    var within = listEl.contains(e.target) || e.target === listEl;
+    if (!within) return;
+    e.preventDefault();
+    if (dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
+    var draggedId = e.dataTransfer.getData("application/x-setlist-reorder");
+    if (!draggedId) return;
+    var dragging = listEl.querySelector(".dragging");
+    var idx = getDropIndex(listEl, e.clientY, dragging, ".setlist-row");
+    var currentOrder = sortSetlists(Array.from(setlistsMap.values())).map(function(sl){ return sl.id; });
+    var fromIdx = currentOrder.indexOf(draggedId);
+    if (fromIdx === -1) return;
+    var copy = currentOrder.slice();
+    var moved = copy.splice(fromIdx, 1)[0];
+    var insertAt = idx;
+    if (fromIdx < idx) insertAt -= 1;
+    copy.splice(insertAt, 0, moved);
+    reorderSetlistsManual(copy);
   });
   setlistsPanel.addEventListener("click", function(e){
     if (e.target.id === "new-setlist-btn" || (e.target.closest && e.target.closest("#new-setlist-btn"))){
