@@ -2,11 +2,13 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jeroen & Irene - Setlist Studio</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
+  html,body{margin:0;}
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
 
   /*
     Palette lifted from jeroenirene.nl: near-black stage backdrop, warm
@@ -115,6 +117,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .login-form .input{flex:1; min-width:110px;}
   .settings-toggle{display:flex; align-items:center; gap:8px; font-size:.88rem;}
   .settings-toggle input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent);}
+  .settings-subheading{margin:0; font-family:"Poppins",sans-serif; font-size:.95rem; font-weight:700;}
+  .settings-import{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
 
   .banner{
     border-radius:var(--radius); padding:12px 16px; font-size:.9rem; font-weight:500;
@@ -147,6 +151,22 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   @media (max-width: 980px){
     .layout{grid-template-columns:1fr;}
     .resize-handle{display:none;}
+  }
+  /* On wider screens the three panels stretch to use the full available
+     screen height (viewport minus header/banner/etc.), each scrolling its
+     own list internally, instead of growing with content and pushing the
+     whole page to scroll. Left as natural stacked/auto-height flow on
+     narrow screens, where a fixed-height column per panel would be awkward. */
+  @media (min-width: 981px){
+    html, body{height:100%;}
+    body{display:flex; flex-direction:column;}
+    .app{display:flex; flex-direction:column; flex:1; min-height:0;}
+    .layout{flex:1; min-height:0; grid-template-rows:minmax(0,1fr); align-items:stretch;}
+    .panel{height:100%;}
+    .library-list, .setlists-list{flex:1; min-height:0; max-height:none; overflow-y:auto;}
+    #editor-panel{display:flex; flex-direction:column; flex:1; min-height:0;}
+    .editor-empty{flex:1;}
+    #setlist-track-list{flex:1; min-height:0; overflow-y:auto;}
   }
 
   .panel{
@@ -186,9 +206,16 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
   .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
 
-  .panel-reorder{display:inline-flex; gap:2px; margin-left:auto;}
-  .panel-reorder .icon-btn{width:26px; height:26px;}
-  .panel-reorder .icon-btn svg{width:14px; height:14px;}
+  .panel-header-actions{display:inline-flex; align-items:center; gap:8px; margin-left:auto;}
+  .panel-drag-handle{
+    display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted);
+    cursor:grab; padding:4px; border-radius:6px; flex:none;
+  }
+  .panel-drag-handle:hover{background:var(--surface-2); color:var(--text);}
+  .panel-drag-handle:active{cursor:grabbing;}
+  .panel-drag-handle svg{width:14px; height:18px;}
+  .panel.panel-dragging{opacity:.5;}
+  .panel.panel-drop-target{outline:2px dashed var(--accent); outline-offset:-3px;}
 
   .input{
     width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
@@ -298,8 +325,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   @media (prefers-reduced-motion: reduce){
     *{transition:none !important;}
   }
-</style>
-</head>
+</style></head>
 <body>
 
 
@@ -311,7 +337,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       </span>
       <div>
         <h1>Jeroen & Irene - Setlist Studio <span class="topbar-flourish" aria-hidden="true">✳</span></h1>
-        <p class="topbar-sub">Bibliotheek opbouwen, setlists slepen, duur automatisch berekend</p>
       </div>
     </div>
     <div class="topbar-stats">
@@ -357,13 +382,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     <section class="panel panel-library" aria-label="Bibliotheek" id="panel-library">
       <div class="panel-header">
         <h2>Bibliotheek</h2>
-        <button type="button" class="btn btn-ghost" id="upload-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
-          Bestand
-        </button>
-        <input type="file" id="file-input" accept=".csv,.txt,text/csv,text/plain" hidden>
       </div>
-      <p class="hint">Kolommen: titel, duur(mm:ss), duur(sec), artiest, genre (beide optioneel)</p>
 
       <div class="library-filters">
         <input type="search" class="input" id="library-search" placeholder="Zoek nummer…" aria-label="Zoek in bibliotheek">
@@ -384,22 +403,14 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     <section class="panel panel-setlists" aria-label="Setlists" id="panel-setlists">
       <div class="panel-header">
         <h2>Setlists</h2>
-        <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          Nieuw
-        </button>
+        <span class="panel-header-actions">
+          <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Nieuw
+          </button>
+        </span>
       </div>
       <div id="new-setlist-form-slot"></div>
-      <select id="setlists-sort" class="input" aria-label="Setlists sorteren">
-        <option value="manual">Handmatig (slepen)</option>
-        <option value="created">Volgorde van aanmaken</option>
-        <option value="name-asc">Naam (A-Z)</option>
-        <option value="name-desc">Naam (Z-A)</option>
-        <option value="duration-asc">Duur (kort → lang)</option>
-        <option value="duration-desc">Duur (lang → kort)</option>
-        <option value="count-desc">Aantal nummers (meer → minder)</option>
-        <option value="count-asc">Aantal nummers (minder → meer)</option>
-      </select>
       <div class="setlists-list" id="setlists-list"></div>
     </section>
 
@@ -461,8 +472,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   var ICON_HANDLE = '<svg viewBox="0 0 8 20" fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="6" cy="3" r="1.4"/><circle cx="2" cy="10" r="1.4"/><circle cx="6" cy="10" r="1.4"/><circle cx="2" cy="17" r="1.4"/><circle cx="6" cy="17" r="1.4"/></svg>';
   var ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>';
   var ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
-  var ICON_LEFT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
-  var ICON_RIGHT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
   var ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
@@ -495,12 +504,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   };
   var librarySearchTerm = "";
   var libraryGenreFilter = "";
-  var SETLISTS_SORT_KEY = "setlist-studio:setlists-sort";
-  var setlistsSortMode = "created";
-  try{
-    var storedSort = window.localStorage.getItem(SETLISTS_SORT_KEY);
-    if (storedSort) setlistsSortMode = storedSort;
-  } catch(e){ /* ignore */ }
   var editingTrackId = null;
   var creatingSetlist = false;
   var renamingSetlistId = null;
@@ -640,11 +643,24 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     return null;
   }
 
+  function importSectionHtml(){
+    return '' +
+      '<div class="settings-divider"></div>' +
+      '<div class="settings-import">' +
+        '<h3 class="settings-subheading">Bibliotheek importeren</h3>' +
+        '<button type="button" class="btn btn-ghost btn-small" id="upload-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>' +
+          ' Bestand kiezen' +
+        '</button>' +
+        '<input type="file" id="file-input" accept=".csv,.txt,text/csv,text/plain" hidden>' +
+      '</div>';
+  }
+
   function renderSettingsPanel(){
     var panel = document.getElementById("settings-panel");
     if (!panel) return;
     if (storeMode === "claude"){
-      panel.innerHTML = '<div class="settings-body"><p>Je gebruikt de Claude-versie: setlists worden al automatisch gedeeld met iedereen die deze pagina opent. Cloud-synchronisatie hieronder is alleen bedoeld voor de losse (bijv. GitHub Pages) versie van deze pagina.</p></div>';
+      panel.innerHTML = '<div class="settings-body"><p>Je gebruikt de Claude-versie: setlists worden al automatisch gedeeld met iedereen die deze pagina opent. Cloud-synchronisatie hieronder is alleen bedoeld voor de losse (bijv. GitHub Pages) versie van deze pagina.</p>' + importSectionHtml() + '</div>';
       return;
     }
     if (storeMode === "cloud"){
@@ -691,6 +707,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
               '<p class="field-error" id="firebase-config-error" hidden></p>' +
               '<button type="button" class="btn btn-accent btn-small" id="connect-cloud-btn">Verbinden</button>' +
             '</details>') +
+          importSectionHtml() +
         '</div>';
       return;
     }
@@ -701,6 +718,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         '<div class="settings-body">' +
           '<p>Cloud-synchronisatie staat op dit apparaat uit. De bibliotheek en setlists worden hier lokaal bewaard en niet gedeeld.</p>' +
           '<button type="button" class="btn btn-accent btn-small" id="reenable-cloud-btn">Cloud-synchronisatie weer inschakelen</button>' +
+          importSectionHtml() +
         '</div>';
       return;
     }
@@ -718,6 +736,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         '<textarea id="firebase-config-input" class="input" rows="5" placeholder="const firebaseConfig = { apiKey: &quot;...&quot;, projectId: &quot;...&quot;, ... };"></textarea>' +
         '<p class="field-error" id="firebase-config-error" hidden></p>' +
         '<button type="button" class="btn btn-accent btn-small" id="connect-cloud-btn">Verbinden</button>' +
+        importSectionHtml() +
       '</div>';
   }
 
@@ -1146,25 +1165,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   }
 
   function sortSetlists(items){
-    var byName = function(a,b){ return a.name.localeCompare(b.name, "nl", {sensitivity:"base"}); };
-    var byDuration = function(a,b){ return totalDurationFor(a) - totalDurationFor(b); };
-    var byCount = function(a,b){ return a.trackIds.length - b.trackIds.length; };
-    var byCreated = function(a,b){ return (a.createdAt||0) - (b.createdAt||0); };
     var byManual = function(a,b){
       var av = typeof a.sortIndex === "number" ? a.sortIndex : (a.createdAt||0);
       var bv = typeof b.sortIndex === "number" ? b.sortIndex : (b.createdAt||0);
       return av - bv;
     };
-    switch (setlistsSortMode){
-      case "manual": return items.sort(byManual);
-      case "name-asc": return items.sort(byName);
-      case "name-desc": return items.sort(function(a,b){ return byName(b,a); });
-      case "duration-asc": return items.sort(byDuration);
-      case "duration-desc": return items.sort(function(a,b){ return byDuration(b,a); });
-      case "count-asc": return items.sort(byCount);
-      case "count-desc": return items.sort(function(a,b){ return byCount(b,a); });
-      default: return items.sort(byCreated);
-    }
+    return items.sort(byManual);
   }
 
   // Rewrites sortIndex sequentially for every setlist in the given final
@@ -1188,8 +1194,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   function renderSetlistsList(){
     if (renamingSetlistId && !setlistsMap.has(renamingSetlistId)) renamingSetlistId = null;
     renderNewSetlistForm();
-    var sortSelect = document.getElementById("setlists-sort");
-    if (sortSelect) sortSelect.value = setlistsSortMode;
     var items = sortSetlists(Array.from(setlistsMap.values()));
     if (items.length === 0){
       setlistsListEl.innerHTML = '<div class="empty-state"><strong>Nog geen setlists</strong>Klik op “Nieuw” om je eerste setlist te maken.</div>';
@@ -1208,7 +1212,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       }
       var key = "setlist:" + sl.id;
       var confirming = pendingConfirm.has(key);
-      var manual = setlistsSortMode === "manual";
+      var manual = true;
       return '' +
         '<div class="setlist-row' + (sl.id === activeSetlistId ? ' active' : '') + (manual ? ' manual' : '') + '"' +
           (manual ? ' draggable="true"' : '') +
@@ -1425,62 +1429,49 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
     '</Relationships>';
+  // Matches the layout of Jeroen & Irene's own Word setlist template: a
+  // centered "JEROEN & IRENE" heading with a rule underneath, the setlist's
+  // own name below it in the same style, then one centered block per track
+  // (title on its own line, "artiest – mm:ss" underneath).
   var DOCX_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>' +
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Aptos" w:cs="Aptos"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>' +
+      '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="278" w:lineRule="auto"/></w:pPr></w:pPrDefault>' +
+    '</w:docDefaults>' +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="44"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Subtle"><w:name w:val="Subtle"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="240"/></w:pPr><w:rPr><w:color w:val="666666"/><w:sz w:val="18"/></w:rPr></w:style>' +
     '</w:styles>';
 
   function buildSetlistDocumentXml(sl){
-    var count = sl.trackIds.length;
     var total = 0;
-    var rowsXml = "";
-    sl.trackIds.forEach(function(tid, i){
+    var trackParagraphs = "";
+    sl.trackIds.forEach(function(tid){
       var t = tracksMap.get(tid);
       var title = t ? t.title : "(verwijderd nummer)";
       var artist = t ? (t.artist || "") : "";
       var dur = t ? t.durationSec : 0;
       total += dur;
-      var titleRuns = '<w:r><w:t xml:space="preserve">' + escapeHtml(title) + '</w:t></w:r>';
-      if (artist){
-        titleRuns += '<w:r><w:br/></w:r><w:r><w:rPr><w:color w:val="666666"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">' + escapeHtml(artist) + '</w:t></w:r>';
-      }
-      rowsXml += '' +
-        '<w:tr>' +
-          '<w:tc><w:tcPr><w:tcW w:w="600" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>' + (i+1) + '</w:t></w:r></w:p></w:tc>' +
-          '<w:tc><w:tcPr><w:tcW w:w="6100" w:type="dxa"/></w:tcPr><w:p>' + titleRuns + '</w:p></w:tc>' +
-          '<w:tc><w:tcPr><w:tcW w:w="1600" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>' + escapeHtml(formatDuration(dur)) + '</w:t></w:r></w:p></w:tc>' +
-        '</w:tr>';
+      var meta = (artist ? escapeHtml(artist) + " – " : "") + escapeHtml(formatDuration(dur));
+      trackParagraphs += '' +
+        '<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>' +
+          '<w:r><w:rPr><w:sz w:val="44"/><w:szCs w:val="44"/></w:rPr><w:t xml:space="preserve">' + escapeHtml(title) + '</w:t></w:r>' +
+          '<w:r><w:br/></w:r>' +
+          '<w:r><w:t xml:space="preserve">' + meta + '</w:t></w:r>' +
+          '<w:r><w:br/></w:r>' +
+        '</w:p>';
     });
-    var headerRow = '' +
-      '<w:tr>' +
-        '<w:tc><w:tcPr><w:tcW w:w="600" w:type="dxa"/><w:shd w:val="clear" w:fill="F0F0F0"/></w:tcPr><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>#</w:t></w:r></w:p></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="6100" w:type="dxa"/><w:shd w:val="clear" w:fill="F0F0F0"/></w:tcPr><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Titel</w:t></w:r></w:p></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="1600" w:type="dxa"/><w:shd w:val="clear" w:fill="F0F0F0"/></w:tcPr><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Duur</w:t></w:r></w:p></w:tc>' +
-      '</w:tr>';
-    var totalRow = '' +
-      '<w:tr>' +
-        '<w:tc><w:tcPr><w:tcW w:w="600" w:type="dxa"/></w:tcPr><w:p/></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="6100" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Totale duur</w:t></w:r></w:p></w:tc>' +
-        '<w:tc><w:tcPr><w:tcW w:w="1600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>' + escapeHtml(formatDuration(total)) + '</w:t></w:r></w:p></w:tc>' +
-      '</w:tr>';
-    var table = '' +
-      '<w:tbl>' +
-        '<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>' +
-          '<w:top w:val="single" w:sz="4" w:color="999999"/><w:left w:val="single" w:sz="4" w:color="999999"/>' +
-          '<w:bottom w:val="single" w:sz="4" w:color="999999"/><w:right w:val="single" w:sz="4" w:color="999999"/>' +
-          '<w:insideH w:val="single" w:sz="4" w:color="999999"/><w:insideV w:val="single" w:sz="4" w:color="999999"/>' +
-        '</w:tblBorders></w:tblPr>' +
-        '<w:tblGrid><w:gridCol w:w="600"/><w:gridCol w:w="6100"/><w:gridCol w:w="1600"/></w:tblGrid>' +
-        headerRow + rowsXml + totalRow +
-      '</w:tbl>';
     var body = '' +
-      '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">' + escapeHtml(sl.name) + '</w:t></w:r></w:p>' +
-      '<w:p><w:pPr><w:pStyle w:val="Subtle"/></w:pPr><w:r><w:t xml:space="preserve">Jeroen &amp; Irene · Setlist Studio · ' + count + ' ' + plural(count,"nummer","nummers") + '</w:t></w:r></w:p>' +
-      table +
-      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>';
+      '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="auto"/></w:pBdr><w:jc w:val="center"/></w:pPr>' +
+        '<w:r><w:rPr><w:b/><w:bCs/><w:sz w:val="46"/><w:szCs w:val="46"/></w:rPr><w:t xml:space="preserve">JEROEN &amp; IRENE</w:t></w:r>' +
+      '</w:p>' +
+      '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' +
+        '<w:r><w:rPr><w:b/><w:bCs/><w:sz w:val="46"/><w:szCs w:val="46"/></w:rPr><w:t xml:space="preserve">' + escapeHtml(sl.name) + '</w:t></w:r>' +
+      '</w:p>' +
+      '<w:p><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr></w:p>' +
+      trackParagraphs +
+      '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' +
+        '<w:r><w:rPr><w:color w:val="666666"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">Totale duur: ' + escapeHtml(formatDuration(total)) + '</w:t></w:r>' +
+      '</w:p>' +
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/><w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body + '</w:body></w:document>';
   }
@@ -1532,50 +1523,47 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     });
     return jsPdfLoadPromise;
   }
+  // Matches the layout of Jeroen & Irene's own Word setlist template: a
+  // centered "JEROEN & IRENE" heading with a rule underneath, the setlist's
+  // own name below it in the same style, then one centered block per track
+  // (title on its own line, "artiest – mm:ss" underneath).
   function buildSetlistPdfBlob(sl, jsPDFCtor){
     var doc = new jsPDFCtor({unit:"pt", format:"a4"});
     var pageWidth = doc.internal.pageSize.getWidth();
     var pageHeight = doc.internal.pageSize.getHeight();
-    var marginX = 48;
-    var y = 64;
-    doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(20);
-    doc.text(sl.name, marginX, y);
-    y += 18;
-    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(120);
-    doc.text("Jeroen & Irene - Setlist Studio", marginX, y);
-    y += 22;
-    doc.setDrawColor(210);
+    var marginX = 71;
+    var centerX = pageWidth / 2;
+    var y = 80;
+
+    doc.setFont("helvetica","bold"); doc.setFontSize(23); doc.setTextColor(20);
+    doc.text("JEROEN & IRENE", centerX, y, {align:"center"});
+    y += 10;
+    doc.setDrawColor(20);
     doc.line(marginX, y, pageWidth - marginX, y);
-    y += 22;
+    y += 34;
+    doc.text(sl.name, centerX, y, {align:"center"});
+    y += 46;
 
     var total = 0;
-    sl.trackIds.forEach(function(tid, i){
+    sl.trackIds.forEach(function(tid){
       var t = tracksMap.get(tid);
       var title = t ? t.title : "(verwijderd nummer)";
       var artist = t ? (t.artist || "") : "";
       var dur = t ? t.durationSec : 0;
       total += dur;
-      if (y > pageHeight - 80){ doc.addPage(); y = 64; }
-      doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(25);
-      doc.text((i+1) + ".", marginX, y);
-      doc.text(title, marginX + 26, y);
-      doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(25);
-      doc.text(formatDuration(dur), pageWidth - marginX, y, {align:"right"});
-      if (artist){
-        y += 13;
-        doc.setFontSize(9); doc.setTextColor(120);
-        doc.text(artist, marginX + 26, y);
-      }
-      y += 20;
+      if (y > pageHeight - 100){ doc.addPage(); y = 80; }
+      doc.setFont("helvetica","normal"); doc.setFontSize(22); doc.setTextColor(20);
+      doc.text(title, centerX, y, {align:"center"});
+      y += 24;
+      doc.setFontSize(12);
+      var meta = (artist ? artist + " – " : "") + formatDuration(dur);
+      doc.text(meta, centerX, y, {align:"center"});
+      y += 40;
     });
 
-    y += 6;
-    doc.setDrawColor(30);
-    doc.line(marginX, y, pageWidth - marginX, y);
-    y += 20;
-    doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(20);
-    doc.text("Totale duur", marginX, y);
-    doc.text(formatDuration(total), pageWidth - marginX, y, {align:"right"});
+    if (y > pageHeight - 60){ doc.addPage(); y = 80; }
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(140);
+    doc.text("Totale duur: " + formatDuration(total), centerX, y, {align:"center"});
 
     return doc.output("blob");
   }
@@ -1749,10 +1737,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       if (requestConfirm(key, renderLibrary)) deleteTrackById(id);
       return;
     }
-    if (e.target.id === "upload-btn" || (e.target.closest && e.target.closest("#upload-btn"))){
-      document.getElementById("file-input").click();
-      return;
-    }
     if (e.target.id === "open-add-track-btn" || (e.target.closest && e.target.closest("#open-add-track-btn"))){
       openAddTrackModal();
     }
@@ -1845,26 +1829,11 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       }
     });
   }
-  libraryPanel.addEventListener("change", function(e){
-    if (e.target.id === "file-input"){
-      var file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (file) handleFileImport(file);
-    }
-  });
-
   // ---------- event delegation: setlists panel ----------
   var setlistsPanel = document.getElementById("panel-setlists");
-  setlistsPanel.addEventListener("change", function(e){
-    if (e.target.id === "setlists-sort"){
-      setlistsSortMode = e.target.value;
-      try{ window.localStorage.setItem(SETLISTS_SORT_KEY, setlistsSortMode); } catch(err){ /* ignore */ }
-      renderSetlistsList();
-    }
-  });
   setlistsPanel.addEventListener("dragstart", function(e){
     var item = e.target.closest ? e.target.closest(".setlist-row") : null;
-    if (!item || setlistsSortMode !== "manual") return;
+    if (!item) return;
     item.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/x-setlist-reorder", item.getAttribute("data-id"));
@@ -1875,7 +1844,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     if (dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
   });
   setlistsPanel.addEventListener("dragover", function(e){
-    if (setlistsSortMode !== "manual") return;
     var listEl = setlistsListEl;
     var types = e.dataTransfer.types;
     var hasReorder = Array.prototype.indexOf.call(types, "application/x-setlist-reorder") !== -1;
@@ -1891,7 +1859,6 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     listEl.insertBefore(dropIndicator, ref);
   });
   setlistsPanel.addEventListener("drop", function(e){
-    if (setlistsSortMode !== "manual") return;
     var listEl = setlistsListEl;
     if (!listEl) return;
     var within = listEl.contains(e.target) || e.target === listEl;
@@ -2123,24 +2090,9 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     } catch(e){ /* ignore */ }
   }
 
-  function reorderButtonsHtml(panelId){
-    return '' +
-      '<span class="panel-reorder">' +
-        '<button type="button" class="icon-btn" data-action="panel-move-left" data-panel="' + panelId + '" aria-label="' + PANEL_LABELS[panelId] + '-blok naar links verplaatsen" title="Naar links verplaatsen">' + ICON_LEFT + '</button>' +
-        '<button type="button" class="icon-btn" data-action="panel-move-right" data-panel="' + panelId + '" aria-label="' + PANEL_LABELS[panelId] + '-blok naar rechts verplaatsen" title="Naar rechts verplaatsen">' + ICON_RIGHT + '</button>' +
-      '</span>';
-  }
-
-  function updateReorderButtons(){
-    DEFAULT_PANEL_ORDER.forEach(function(id){
-      var section = panelSectionEl(id);
-      if (!section) return;
-      var idx = panelOrder.indexOf(id);
-      var leftBtn = section.querySelector('[data-action="panel-move-left"]');
-      var rightBtn = section.querySelector('[data-action="panel-move-right"]');
-      if (leftBtn) leftBtn.disabled = (idx === 0);
-      if (rightBtn) rightBtn.disabled = (idx === panelOrder.length - 1);
-    });
+  function panelDragHandleHtml(panelId){
+    return '<span class="panel-drag-handle" draggable="true" data-panel="' + panelId + '" aria-label="' +
+      PANEL_LABELS[panelId] + '-blok verslepen om te verplaatsen" title="Sleep om te verplaatsen">' + ICON_HANDLE + '</span>';
   }
 
   function applyPanelLayout(){
@@ -2155,34 +2107,97 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     if (handle2) handle2.style.order = 3;
     layoutEl.style.setProperty("--w-col1", clampFr(panelWidths[panelOrder[0]]).toFixed(3) + "fr");
     layoutEl.style.setProperty("--w-col2", clampFr(panelWidths[panelOrder[1]]).toFixed(3) + "fr");
-    updateReorderButtons();
   }
 
-  function movePanel(panelId, dir){
-    var idx = panelOrder.indexOf(panelId);
-    var newIdx = idx + dir;
-    if (idx === -1 || newIdx < 0 || newIdx >= panelOrder.length) return;
-    var copy = panelOrder.slice();
-    var tmp = copy[idx]; copy[idx] = copy[newIdx]; copy[newIdx] = tmp;
-    panelOrder = copy;
-    savePanelOrder();
-    applyPanelLayout();
+  // Drag & drop reordering of the three panels themselves — same mechanic
+  // (native HTML5 drag & drop, a dedicated grip handle) already used for
+  // reordering tracks within a setlist and reordering the setlists list,
+  // just applied to the three-panel row instead of a vertical list: the
+  // drop side (left/right half of the hovered panel) decides whether the
+  // dragged panel is inserted before or after it.
+  var panelDragId = null;
+
+  function panelIdForSection(section){
+    var found = null;
+    DEFAULT_PANEL_ORDER.forEach(function(id){ if (panelSectionEl(id) === section) found = id; });
+    return found;
+  }
+
+  function clearPanelDropTargets(){
+    DEFAULT_PANEL_ORDER.forEach(function(id){
+      var section = panelSectionEl(id);
+      if (section) section.classList.remove("panel-drop-target");
+    });
   }
 
   function initPanelReorder(){
     DEFAULT_PANEL_ORDER.forEach(function(id){
       var section = panelSectionEl(id);
       var header = section ? section.querySelector(".panel-header") : null;
-      if (header && !header.querySelector(".panel-reorder")){
-        header.insertAdjacentHTML("beforeend", reorderButtonsHtml(id));
+      if (!header || header.querySelector(".panel-drag-handle")) return;
+      var actions = header.querySelector(".panel-header-actions");
+      if (actions){
+        actions.insertAdjacentHTML("beforeend", panelDragHandleHtml(id));
+      } else {
+        header.insertAdjacentHTML("beforeend", '<span class="panel-header-actions">' + panelDragHandleHtml(id) + '</span>');
       }
     });
     var layoutEl = document.querySelector(".layout");
-    layoutEl.addEventListener("click", function(e){
-      var btn = e.target.closest && e.target.closest('[data-action="panel-move-left"], [data-action="panel-move-right"]');
-      if (!btn || btn.disabled) return;
-      var dir = btn.getAttribute("data-action") === "panel-move-left" ? -1 : 1;
-      movePanel(btn.getAttribute("data-panel"), dir);
+    layoutEl.addEventListener("dragstart", function(e){
+      var handle = e.target.closest && e.target.closest(".panel-drag-handle");
+      if (!handle) return;
+      panelDragId = handle.getAttribute("data-panel");
+      var section = panelSectionEl(panelDragId);
+      if (section) section.classList.add("panel-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("application/x-panel-reorder", panelDragId);
+    });
+    layoutEl.addEventListener("dragend", function(){
+      var section = panelDragId ? panelSectionEl(panelDragId) : null;
+      if (section) section.classList.remove("panel-dragging");
+      clearPanelDropTargets();
+      panelDragId = null;
+    });
+    layoutEl.addEventListener("dragover", function(e){
+      if (!panelDragId) return;
+      var types = e.dataTransfer.types;
+      var hasReorder = Array.prototype.indexOf.call(types, "application/x-panel-reorder") !== -1;
+      if (!hasReorder) return;
+      var targetSection = e.target.closest && e.target.closest(".panel");
+      if (!targetSection) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      var targetId = panelIdForSection(targetSection);
+      clearPanelDropTargets();
+      if (!targetId || targetId === panelDragId) return;
+      targetSection.classList.add("panel-drop-target");
+    });
+    layoutEl.addEventListener("drop", function(e){
+      if (!panelDragId) return;
+      var types = e.dataTransfer.types;
+      var hasReorder = Array.prototype.indexOf.call(types, "application/x-panel-reorder") !== -1;
+      if (!hasReorder) return;
+      var targetSection = e.target.closest && e.target.closest(".panel");
+      clearPanelDropTargets();
+      if (!targetSection){ panelDragId = null; return; }
+      e.preventDefault();
+      var targetId = panelIdForSection(targetSection);
+      var draggedId = panelDragId;
+      panelDragId = null;
+      if (!targetId || targetId === draggedId) return;
+      var rect = targetSection.getBoundingClientRect();
+      var before = e.clientX < rect.left + rect.width / 2;
+      var copy = panelOrder.slice();
+      var fromIdx = copy.indexOf(draggedId);
+      if (fromIdx === -1) return;
+      copy.splice(fromIdx, 1);
+      var insertAt = copy.indexOf(targetId);
+      if (insertAt === -1) return;
+      if (!before) insertAt += 1;
+      copy.splice(insertAt, 0, draggedId);
+      panelOrder = copy;
+      savePanelOrder();
+      applyPanelLayout();
     });
   }
 
@@ -2268,6 +2283,11 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       if (e.target.id === "disconnect-cloud-btn"){ handleDisconnectFirebase(); return; }
       if (e.target.id === "reenable-cloud-btn"){ handleReenableFirebase(); return; }
       if (e.target.id === "auth-logout-btn"){ handleAuthLogout(); return; }
+      if (e.target.id === "upload-btn" || (e.target.closest && e.target.closest("#upload-btn"))){
+        var fileInput = document.getElementById("file-input");
+        if (fileInput) fileInput.click();
+        return;
+      }
     });
     settingsPanelEl.addEventListener("submit", function(e){
       if (e.target.id === "settings-login-form"){
@@ -2281,6 +2301,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     settingsPanelEl.addEventListener("change", function(e){
       if (e.target.id === "require-login-toggle"){
         handleToggleRequireLogin(e.target.checked);
+        return;
+      }
+      if (e.target.id === "file-input"){
+        var file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (file) handleFileImport(file);
       }
     });
   }
