@@ -75,6 +75,19 @@
     padding:6px 14px; font-size:.85rem; font-weight:600; color:var(--text-muted);
   }
 
+  .settings-panel{
+    border-radius:var(--radius); padding:16px 20px; border:1px solid var(--border);
+    background:var(--surface); box-shadow:var(--shadow);
+  }
+  .settings-body{display:flex; flex-direction:column; gap:10px; max-width:560px;}
+  .settings-body p{margin:0; color:var(--text-muted); font-size:.88rem; line-height:1.5;}
+  .settings-status{color:var(--success); font-weight:600;}
+  .settings-help{font-size:.85rem; color:var(--text-muted);}
+  .settings-help summary{cursor:pointer; color:var(--accent); font-weight:600;}
+  .settings-help ol{margin:8px 0 0; padding-left:18px; display:flex; flex-direction:column; gap:4px;}
+  .settings-help code{background:var(--surface-2); padding:1px 5px; border-radius:4px; font-family:"IBM Plex Mono",monospace; font-size:.82rem;}
+  #firebase-config-input{font-family:"IBM Plex Mono",monospace; font-size:.8rem; resize:vertical;}
+
   .banner{
     border-radius:var(--radius); padding:12px 16px; font-size:.9rem; font-weight:500;
     border:1px solid var(--border); background:var(--surface-2); color:var(--text);
@@ -255,8 +268,13 @@
     <div class="topbar-stats">
       <span id="stat-tracks" class="stat-chip">0 nummers</span>
       <span id="stat-setlists" class="stat-chip">0 setlists</span>
+      <button type="button" class="icon-btn" id="settings-btn" aria-label="Cloud-synchronisatie instellen" title="Cloud-synchronisatie">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      </button>
     </div>
   </header>
+
+  <div id="settings-panel" class="settings-panel" hidden></div>
 
   <div id="banner" class="banner" hidden role="status"></div>
 
@@ -366,6 +384,8 @@
   var localStorageOk = false;
   var STORAGE_KEY_TRACKS = "setlist-studio:tracks";
   var STORAGE_KEY_SETLISTS = "setlist-studio:setlists";
+  var FIREBASE_CONFIG_KEY = "setlist-studio:firebase-config";
+  var PENDING_MIGRATION_KEY = "setlist-studio:pending-migration";
   var librarySearchTerm = "";
   var editingTrackId = null;
   var creatingSetlist = false;
@@ -436,37 +456,216 @@
     return total;
   }
 
-  // ---------- store (db-backed or in-memory fallback) ----------
+  // ---------- store: Claude db capability, self-configured Firebase cloud
+  // sync, local-only browser storage, or in-memory-only, in that priority
+  // order. `db` ends up pointing at either the Claude capability's namespace
+  // or a real Firestore instance — both expose the same collection(path)
+  // .doc(id).{get,set,update,delete,onSnapshot} shape, so every mutation
+  // function below (addTrack, mutateSetlist, ...) works unchanged for
+  // either remote backend; only initStore() needs to know which one it is.
+  var storeMode = "memory"; // "claude" | "cloud" | "local" | "memory"
+
+  function loadFirebaseConfig(){
+    try{
+      var raw = window.localStorage.getItem(FIREBASE_CONFIG_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (obj && obj.apiKey && obj.projectId) return obj;
+    } catch(e){ /* ignore */ }
+    return null;
+  }
+  function saveFirebaseConfig(cfg){
+    try{ window.localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(cfg)); } catch(e){ /* ignore */ }
+  }
+  function clearFirebaseConfig(){
+    try{ window.localStorage.removeItem(FIREBASE_CONFIG_KEY); } catch(e){ /* ignore */ }
+  }
+  // Accepts either the raw `const firebaseConfig = {...};` snippet Firebase
+  // shows in its console, or plain JSON.
+  function parseFirebaseConfigInput(text){
+    var match = String(text || "").match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    var objText = match[0];
+    try{
+      var obj = new Function("return (" + objText + ");")();
+      if (obj && typeof obj === "object" && obj.apiKey && obj.projectId) return obj;
+    } catch(e){ /* fall through to strict JSON */ }
+    try{
+      var asJson = JSON.parse(objText);
+      if (asJson && asJson.apiKey && asJson.projectId) return asJson;
+    } catch(e){ /* ignore */ }
+    return null;
+  }
+
+  function renderSettingsPanel(){
+    var panel = document.getElementById("settings-panel");
+    if (!panel) return;
+    if (storeMode === "claude"){
+      panel.innerHTML = '<div class="settings-body"><p>Je gebruikt de Claude-versie: setlists worden al automatisch gedeeld met iedereen die deze pagina opent. Cloud-synchronisatie hieronder is alleen bedoeld voor de losse (bijv. GitHub Pages) versie van deze pagina.</p></div>';
+      return;
+    }
+    if (storeMode === "cloud"){
+      panel.innerHTML = '' +
+        '<div class="settings-body">' +
+          '<p class="settings-status">Verbonden met cloud-synchronisatie. Iedereen die deze pagina met dezelfde configuratie opent, ziet en bewerkt dezelfde bibliotheek en setlists.</p>' +
+          '<button type="button" class="btn btn-ghost btn-small" id="disconnect-cloud-btn">Loskoppelen</button>' +
+        '</div>';
+      return;
+    }
+    panel.innerHTML = '' +
+      '<div class="settings-body">' +
+        '<p>Verbind een gratis Firebase-project om je bibliotheek en setlists te delen tussen apparaten en met anderen (bijv. Irene).</p>' +
+        '<details class="settings-help"><summary>Hoe krijg ik dit?</summary>' +
+          '<ol>' +
+            '<li>Ga naar <strong>console.firebase.google.com</strong> en maak een gratis project.</li>' +
+            '<li>Kies links <strong>Build → Firestore Database</strong>, klik "Create database" en start in testmodus.</li>' +
+            '<li>Ga naar Projectinstellingen (tandwiel) → "Your apps" → voeg een webapp toe (&lt;/&gt;-icoon).</li>' +
+            '<li>Kopieer het getoonde <code>firebaseConfig</code>-object en plak het hieronder.</li>' +
+          '</ol>' +
+        '</details>' +
+        '<textarea id="firebase-config-input" class="input" rows="5" placeholder="const firebaseConfig = { apiKey: &quot;...&quot;, projectId: &quot;...&quot;, ... };"></textarea>' +
+        '<p class="field-error" id="firebase-config-error" hidden></p>' +
+        '<button type="button" class="btn btn-accent btn-small" id="connect-cloud-btn">Verbinden</button>' +
+      '</div>';
+  }
+
+  function handleConnectFirebase(){
+    var input = document.getElementById("firebase-config-input");
+    var errorEl = document.getElementById("firebase-config-error");
+    var cfg = parseFirebaseConfigInput(input ? input.value : "");
+    if (!cfg){
+      if (errorEl){ errorEl.textContent = "Kon de configuratie niet lezen. Plak het volledige firebaseConfig-object zoals Firebase het toont (met apiKey en projectId)."; errorEl.hidden = false; }
+      return;
+    }
+    try{
+      var pending = { tracks: Array.from(tracksMap.values()), setlists: Array.from(setlistsMap.values()) };
+      if (pending.tracks.length || pending.setlists.length){
+        window.sessionStorage.setItem(PENDING_MIGRATION_KEY, JSON.stringify(pending));
+      }
+    } catch(e){ /* ignore */ }
+    saveFirebaseConfig(cfg);
+    window.location.reload();
+  }
+  function handleDisconnectFirebase(){
+    clearFirebaseConfig();
+    window.location.reload();
+  }
+
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function(){ reject(new Error("kon " + src + " niet laden")); };
+      document.head.appendChild(s);
+    });
+  }
+  var firebaseSdkLoadPromise = null;
+  function loadFirebaseSdk(){
+    if (window.firebase && window.firebase.firestore) return Promise.resolve();
+    if (firebaseSdkLoadPromise) return firebaseSdkLoadPromise;
+    var FB_VERSION = "10.13.2";
+    firebaseSdkLoadPromise = loadScript("https://www.gstatic.com/firebasejs/" + FB_VERSION + "/firebase-app-compat.js")
+      .then(function(){ return loadScript("https://www.gstatic.com/firebasejs/" + FB_VERSION + "/firebase-firestore-compat.js"); })
+      .catch(function(e){ firebaseSdkLoadPromise = null; throw e; });
+    return firebaseSdkLoadPromise;
+  }
+  async function initFirebase(config){
+    await loadFirebaseSdk();
+    if (!window.firebase || !window.firebase.firestore) throw new Error("Firebase SDK niet beschikbaar.");
+    var app;
+    try{ app = window.firebase.initializeApp(config); }
+    catch(e){ app = window.firebase.initializeApp(config, "setlist-studio-" + Date.now()); }
+    return window.firebase.firestore(app);
+  }
+
+  function subscribeRemote(){
+    db.collection("tracks").onSnapshot(function(snap){
+      tracksMap.clear();
+      snap.docs.forEach(function(d){ tracksMap.set(d.id, Object.assign({id:d.id}, d.data())); });
+      renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+    }, function(){ showBanner("De bibliotheek kon niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
+
+    db.collection("setlists").onSnapshot(function(snap){
+      setlistsMap.clear();
+      snap.docs.forEach(function(d){ setlistsMap.set(d.id, Object.assign({id:d.id}, d.data())); });
+      if (activeSetlistId && !setlistsMap.has(activeSetlistId)) activeSetlistId = null;
+      renderSetlistsList(); renderActiveSetlist(); renderStats();
+    }, function(){ showBanner("De setlists konden niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
+  }
+
+  // One-time handoff: local data present before connecting cloud sync is
+  // uploaded (with its original ids, so setlist track references stay
+  // valid) rather than silently left behind.
+  function maybeMigratePendingData(){
+    var raw;
+    try{ raw = window.sessionStorage.getItem(PENDING_MIGRATION_KEY); } catch(e){ raw = null; }
+    if (!raw) return;
+    try{ window.sessionStorage.removeItem(PENDING_MIGRATION_KEY); } catch(e){ /* ignore */ }
+    var pending;
+    try{ pending = JSON.parse(raw); } catch(e){ return; }
+    if (!pending) return;
+    var tasks = [];
+    (pending.tracks || []).forEach(function(t){
+      var data = Object.assign({}, t); delete data.id;
+      tasks.push(db.collection("tracks").doc(t.id).set(data));
+    });
+    (pending.setlists || []).forEach(function(s){
+      var data = Object.assign({}, s); delete data.id;
+      tasks.push(db.collection("setlists").doc(s.id).set(data));
+    });
+    if (!tasks.length) return;
+    Promise.all(tasks).then(function(){
+      showBanner("Lokale nummers en setlists zijn meegenomen naar de cloud-synchronisatie.", "success");
+    }).catch(function(){
+      showBanner("Niet alle lokale gegevens konden worden meegenomen naar de cloud.", "warn");
+    });
+  }
+
   async function initStore(){
+    // 1. The Claude artifact's own shared storage, when this page is
+    //    running inside Claude.
     try{
       db = (window.claude && window.claude.use) ? await window.claude.use("db") : null;
     } catch(e){ db = null; }
-
     if (db){
-      usingDb = true;
-      db.collection("tracks").onSnapshot(function(snap){
-        tracksMap.clear();
-        snap.docs.forEach(function(d){ tracksMap.set(d.id, Object.assign({id:d.id}, d.data())); });
-        renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
-      }, function(){ showBanner("De bibliotheek kon niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
-
-      db.collection("setlists").onSnapshot(function(snap){
-        setlistsMap.clear();
-        snap.docs.forEach(function(d){ setlistsMap.set(d.id, Object.assign({id:d.id}, d.data())); });
-        if (activeSetlistId && !setlistsMap.has(activeSetlistId)) activeSetlistId = null;
-        renderSetlistsList(); renderActiveSetlist(); renderStats();
-      }, function(){ showBanner("De setlists konden niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
-    } else {
-      usingDb = false;
-      localStorageOk = probeLocalStorage();
-      if (localStorageOk){
-        loadLocal();
-        showBanner("Nummers en setlists worden lokaal in deze browser bewaard (niet gedeeld tussen apparaten).");
-      } else {
-        showBanner("Opslag is niet beschikbaar — wijzigingen worden niet bewaard na het sluiten van deze pagina.", "warn");
-      }
-      renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+      usingDb = true; storeMode = "claude";
+      subscribeRemote();
+      renderSettingsPanel();
+      return;
     }
+
+    // 2. A self-configured Firebase project, for sharing/collaboration
+    //    when hosted outside Claude (e.g. GitHub Pages) — see the
+    //    settings panel (gear icon).
+    var fbConfig = loadFirebaseConfig();
+    if (fbConfig){
+      try{
+        db = await initFirebase(fbConfig);
+        usingDb = true; storeMode = "cloud";
+        subscribeRemote();
+        maybeMigratePendingData();
+        showBanner("Verbonden met cloud-synchronisatie — wijzigingen zijn direct zichtbaar voor iedereen met deze configuratie.", "success");
+        renderSettingsPanel();
+        return;
+      } catch(e){
+        showBanner("Kon niet verbinden met cloud-synchronisatie (" + (e && e.message ? e.message : "onbekende fout") + "). Tijdelijk teruggevallen op lokale opslag.", "warn");
+      }
+    }
+
+    // 3. Local browser storage, or in-memory only as a last resort.
+    usingDb = false;
+    localStorageOk = probeLocalStorage();
+    if (localStorageOk){
+      loadLocal();
+      storeMode = "local";
+      showBanner("Nummers en setlists worden lokaal in deze browser bewaard (niet gedeeld). Wil je samenwerken? Verbind cloud-synchronisatie via het instellingen-icoon rechtsboven.");
+    } else {
+      storeMode = "memory";
+      showBanner("Opslag is niet beschikbaar — wijzigingen worden niet bewaard na het sluiten van deze pagina.", "warn");
+    }
+    renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+    renderSettingsPanel();
   }
 
   async function addTrack(title, artist, durationSec){
@@ -1473,6 +1672,20 @@
 
     setupResizeHandle(document.getElementById("resize-handle-library"), libraryEl, editorEl);
     setupResizeHandle(document.getElementById("resize-handle-setlists"), setlistsEl, editorEl);
+  }
+
+  // ---------- settings panel (cloud sync) ----------
+  var settingsBtn = document.getElementById("settings-btn");
+  var settingsPanelEl = document.getElementById("settings-panel");
+  if (settingsBtn && settingsPanelEl){
+    settingsBtn.addEventListener("click", function(){
+      settingsPanelEl.hidden = !settingsPanelEl.hidden;
+      if (!settingsPanelEl.hidden) renderSettingsPanel();
+    });
+    settingsPanelEl.addEventListener("click", function(e){
+      if (e.target.id === "connect-cloud-btn"){ handleConnectFirebase(); return; }
+      if (e.target.id === "disconnect-cloud-btn"){ handleDisconnectFirebase(); return; }
+    });
   }
 
   // ---------- boot ----------
