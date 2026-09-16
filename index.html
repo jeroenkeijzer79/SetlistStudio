@@ -6,9 +6,9 @@
 <title>Jeroen & Irene - Setlist Studio</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-  html,body{margin:0;}
-  img{max-width:100%;}
-  [hidden]{display:none!important;}
+html,body{margin:0;}
+img{max-width:100%;}
+[hidden]{display:none!important;}
 
   /*
     Palette lifted from jeroenirene.nl: near-black stage backdrop, warm
@@ -138,6 +138,16 @@
   .settings-toggle input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent);}
   .settings-subheading{margin:0; font-family:"Poppins",sans-serif; font-size:.95rem; font-weight:700;}
   .settings-import{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
+  .settings-theme{display:flex; flex-direction:column; gap:10px; align-items:flex-start;}
+  .theme-swatch-row{display:flex; flex-wrap:wrap; gap:14px;}
+  .theme-swatch{display:flex; flex-direction:column; align-items:center; gap:4px; font-size:.74rem; color:var(--text-muted); cursor:pointer; text-align:center; width:64px;}
+  .theme-swatch input[type="color"]{
+    width:40px; height:32px; padding:0; border:1px solid var(--border); border-radius:6px;
+    background:none; cursor:pointer;
+  }
+  .theme-swatch input[type="color"]::-webkit-color-swatch-wrapper{padding:2px;}
+  .theme-swatch input[type="color"]::-webkit-color-swatch{border:none; border-radius:4px;}
+  .theme-swatch input[type="color"]::-moz-color-swatch{border:none; border-radius:4px;}
 
   .banner{
     border-radius:var(--radius); padding:12px 16px; font-size:.9rem; font-weight:500;
@@ -322,7 +332,11 @@
 
   .editor-empty{
     display:flex; align-items:center; justify-content:center; min-height:280px; text-align:center;
-    color:var(--text-muted); flex-direction:column; gap:6px;
+    color:var(--text-muted); flex-direction:column; gap:6px; border-radius:8px; border:2px dashed transparent;
+    transition:border-color .12s ease, background-color .12s ease;
+  }
+  .editor-empty.drop-target{
+    border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .editor-header{display:flex; flex-direction:column; gap:10px;}
@@ -364,8 +378,12 @@
   @media (prefers-reduced-motion: reduce){
     *{transition:none !important;}
   }
-</style></head>
+
+</style>
+</head>
 <body>
+
+
 
 
 <div class="app">
@@ -556,6 +574,59 @@
     appId: "1:277799225691:web:11626315899993590bf27e",
     measurementId: "G-PVSDB64C41"
   };
+  // ---------- theme (per-device colour overrides) ----------
+  var THEME_KEY = "setlist-studio:theme";
+  var DEFAULT_THEME = {bg:"#161616", surface:"#232323", surface2:"#2d2b29", accent:"#f4673b", text:"#f5f3f0", textMuted:"#a89f96"};
+  function loadThemeOverride(){
+    try{
+      var raw = window.localStorage.getItem(THEME_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      return (obj && typeof obj === "object") ? obj : null;
+    } catch(e){ return null; }
+  }
+  function saveThemeOverride(theme){
+    try{ window.localStorage.setItem(THEME_KEY, JSON.stringify(theme)); } catch(e){ /* ignore */ }
+  }
+  function clearThemeOverride(){
+    try{ window.localStorage.removeItem(THEME_KEY); } catch(e){ /* ignore */ }
+  }
+  function currentTheme(){
+    return Object.assign({}, DEFAULT_THEME, loadThemeOverride() || {});
+  }
+  function hexToRgb(hex){
+    var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+    if (!m) return {r:0, g:0, b:0};
+    return {r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16)};
+  }
+  function rgbToHex(r,g,b){
+    function h(n){ return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2,"0"); }
+    return "#" + h(r) + h(g) + h(b);
+  }
+  function darkenHex(hex, amount){
+    var c = hexToRgb(hex);
+    return rgbToHex(c.r*(1-amount), c.g*(1-amount), c.b*(1-amount));
+  }
+  function relativeLuminance(hex){
+    var c = hexToRgb(hex);
+    function lin(v){ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); }
+    return 0.2126*lin(c.r) + 0.7152*lin(c.g) + 0.0722*lin(c.b);
+  }
+  // Accent-strong (button border/hover) and accent-contrast (button text)
+  // are derived from the chosen button colour rather than picked
+  // separately, so a custom button colour still looks coherent.
+  function applyTheme(theme){
+    var root = document.documentElement.style;
+    root.setProperty("--bg", theme.bg);
+    root.setProperty("--surface", theme.surface);
+    root.setProperty("--surface-2", theme.surface2);
+    root.setProperty("--text", theme.text);
+    root.setProperty("--text-muted", theme.textMuted);
+    root.setProperty("--accent", theme.accent);
+    root.setProperty("--accent-strong", darkenHex(theme.accent, 0.15));
+    root.setProperty("--accent-contrast", relativeLuminance(theme.accent) > 0.45 ? "#20120a" : "#fdf6f0");
+  }
+
   var librarySearchTerm = "";
   var libraryGenreFilters = new Set();
   var editingTrackId = null;
@@ -729,6 +800,33 @@
           ' Bestand kiezen' +
         '</button>' +
         '<input type="file" id="setlist-docx-input" accept=".docx" hidden>' +
+      '</div>' +
+      themeSectionHtml();
+  }
+
+  function themeSectionHtml(){
+    var t = currentTheme();
+    var swatches = [
+      {id:"theme-bg", key:"bg", label:"Achtergrond"},
+      {id:"theme-surface", key:"surface", label:"Blokken"},
+      {id:"theme-surface2", key:"surface2", label:"Versleepbare items"},
+      {id:"theme-accent", key:"accent", label:"Knoppen"},
+      {id:"theme-text", key:"text", label:"Tekst"},
+      {id:"theme-textmuted", key:"textMuted", label:"Tekst (gedempt)"}
+    ];
+    return '' +
+      '<div class="settings-divider"></div>' +
+      '<div class="settings-theme">' +
+        '<h3 class="settings-subheading">Kleuren aanpassen</h3>' +
+        '<div class="theme-swatch-row">' +
+          swatches.map(function(s){
+            return '<label class="theme-swatch">' +
+              '<input type="color" id="' + s.id + '" value="' + t[s.key] + '">' +
+              '<span>' + s.label + '</span>' +
+            '</label>';
+          }).join("") +
+        '</div>' +
+        '<button type="button" class="btn btn-ghost btn-small" id="theme-reset-btn">Standaardkleuren herstellen</button>' +
       '</div>';
   }
 
@@ -1106,6 +1204,24 @@
     }
   }
 
+  // Dropping a library track onto the editor panel while no setlist is
+  // selected starts a new one for it, instead of the drop silently doing
+  // nothing — same "Setlist N" default name as the manual "Nieuw" button.
+  async function createSetlistWithTrack(name, trackId){
+    var data = {name: name, trackIds: [trackId], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
+    if (usingDb){
+      var ref = await db.collection("setlists").add(data);
+      activeSetlistId = ref.id;
+      renderActiveSetlist();
+    } else {
+      var id = uid();
+      setlistsMap.set(id, Object.assign({id:id}, data));
+      activeSetlistId = id;
+      persistLocal();
+      renderSetlistsList(); renderActiveSetlist(); renderStats();
+    }
+  }
+
   async function renameSetlist(id, name){
     if (usingDb){
       await db.collection("setlists").doc(id).update({name:name, updatedAt:Date.now()});
@@ -1346,7 +1462,7 @@
   function renderActiveSetlist(){
     var sl = activeSetlistId ? setlistsMap.get(activeSetlistId) : null;
     if (!sl){
-      editorPanelEl.innerHTML = '<div class="editor-empty"><strong style="font-family:\'Poppins\',sans-serif;font-size:1.1rem;color:var(--text);">Geen setlist geselecteerd</strong><span>Kies een setlist links, of maak een nieuwe aan.</span></div>';
+      editorPanelEl.innerHTML = '<div class="editor-empty" id="editor-empty-dropzone"><strong style="font-family:\'Poppins\',sans-serif;font-size:1.1rem;color:var(--text);">Geen setlist geselecteerd</strong><span>Kies een setlist links, maak een nieuwe aan, of sleep een nummer hierheen om er meteen een te starten.</span></div>';
       return;
     }
     var trackCount = sl.trackIds.length;
@@ -2026,12 +2142,26 @@
     if (dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
   });
   editorPanelEl.addEventListener("dragover", function(e){
-    var listEl = document.getElementById("setlist-track-list");
-    if (!listEl || !listEl.contains(e.target) && e.target !== listEl) { /* still allow if inside */ }
     var types = e.dataTransfer.types;
     var hasTrack = Array.prototype.indexOf.call(types, "application/x-track-id") !== -1;
     var hasReorder = Array.prototype.indexOf.call(types, "application/x-reorder-index") !== -1;
     if (!hasTrack && !hasReorder) return;
+
+    if (!activeSetlistId){
+      // No setlist yet: dragging a library track over the empty-state
+      // placeholder is a valid drop that will create one for it. A
+      // reorder drag can't reach here (nothing to reorder without a
+      // setlist), so only library-track drags are accepted.
+      if (!hasTrack) return;
+      var emptyEl = document.getElementById("editor-empty-dropzone");
+      if (!emptyEl || !(emptyEl.contains(e.target) || e.target === emptyEl)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      emptyEl.classList.add("drop-target");
+      return;
+    }
+
+    var listEl = document.getElementById("setlist-track-list");
     if (!listEl) return;
     var within = listEl.contains(e.target) || e.target === listEl;
     if (!within) return;
@@ -2044,13 +2174,24 @@
     listEl.insertBefore(dropIndicator, ref);
   });
   editorPanelEl.addEventListener("drop", function(e){
+    if (!activeSetlistId){
+      var emptyEl = document.getElementById("editor-empty-dropzone");
+      if (emptyEl) emptyEl.classList.remove("drop-target");
+      var withinEmpty = emptyEl && (emptyEl.contains(e.target) || e.target === emptyEl);
+      if (!withinEmpty) return;
+      e.preventDefault();
+      var newTrackId = e.dataTransfer.getData("application/x-track-id");
+      if (!newTrackId) return;
+      createSetlistWithTrack("Setlist " + (setlistsMap.size + 1), newTrackId);
+      return;
+    }
+
     var listEl = document.getElementById("setlist-track-list");
     if (!listEl) return;
     var within = listEl.contains(e.target) || e.target === listEl;
     if (!within) return;
     e.preventDefault();
     if (dropIndicator.parentNode) dropIndicator.parentNode.removeChild(dropIndicator);
-    if (!activeSetlistId) return;
     var trackId = e.dataTransfer.getData("application/x-track-id");
     var reorderIdxStr = e.dataTransfer.getData("application/x-reorder-index");
     var dragging = listEl.querySelector(".dragging");
@@ -2070,6 +2211,15 @@
       });
     }
   });
+  editorPanelEl.addEventListener("dragleave", function(e){
+    if (activeSetlistId) return;
+    var emptyEl = document.getElementById("editor-empty-dropzone");
+    if (!emptyEl) return;
+    // Only clear the highlight once the pointer has actually left the
+    // dropzone (not just moved to a child element inside it).
+    if (e.relatedTarget && emptyEl.contains(e.relatedTarget)) return;
+    emptyEl.classList.remove("drop-target");
+  });
 
   // library drag source
   document.getElementById("panel-library").addEventListener("dragstart", function(e){
@@ -2082,6 +2232,8 @@
   document.getElementById("panel-library").addEventListener("dragend", function(e){
     var item = e.target.closest ? e.target.closest(".track-item") : null;
     if (item) item.classList.remove("dragging");
+    var emptyEl = document.getElementById("editor-empty-dropzone");
+    if (emptyEl) emptyEl.classList.remove("drop-target");
   });
 
   // ---------- event delegation: library panel ----------
@@ -2770,6 +2922,25 @@
         if (setlistFileInput) setlistFileInput.click();
         return;
       }
+      if (e.target.id === "theme-reset-btn"){
+        clearThemeOverride();
+        applyTheme(DEFAULT_THEME);
+        renderSettingsPanel();
+        return;
+      }
+    });
+    settingsPanelEl.addEventListener("input", function(e){
+      if (!e.target.id || e.target.id.indexOf("theme-") !== 0) return;
+      var themeInputMap = {
+        "theme-bg": "bg", "theme-surface": "surface", "theme-surface2": "surface2",
+        "theme-accent": "accent", "theme-text": "text", "theme-textmuted": "textMuted"
+      };
+      var themeKey = themeInputMap[e.target.id];
+      if (!themeKey) return;
+      var theme = currentTheme();
+      theme[themeKey] = e.target.value;
+      applyTheme(theme);
+      saveThemeOverride(theme);
     });
     settingsPanelEl.addEventListener("submit", function(e){
       if (e.target.id === "settings-login-form"){
@@ -2813,6 +2984,7 @@
   }
 
   // ---------- boot ----------
+  applyTheme(currentTheme());
   initPanelLayout();
   initStore();
 })();
