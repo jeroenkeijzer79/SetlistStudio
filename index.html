@@ -137,7 +137,7 @@ img{max-width:100%;}
   .settings-toggle{display:flex; align-items:center; gap:8px; font-size:.88rem;}
   .settings-toggle input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent);}
   .settings-subheading{margin:0; font-family:"Poppins",sans-serif; font-size:.95rem; font-weight:700;}
-  .settings-import{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
+  .settings-import, .settings-display{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
   .settings-theme{display:flex; flex-direction:column; gap:10px; align-items:flex-start;}
   .theme-swatch-row{display:flex; flex-wrap:wrap; gap:14px;}
   .theme-swatch{display:flex; flex-direction:column; align-items:center; gap:4px; font-size:.74rem; color:var(--text-muted); cursor:pointer; text-align:center; width:64px;}
@@ -271,6 +271,7 @@ img{max-width:100%;}
   .track-edit-title{flex:1.3; min-width:0;}
   .track-edit-artist{flex:1; min-width:0;}
   .track-edit-genre{flex:.8; min-width:0;}
+  .track-edit-programma{width:80px; flex:none;}
   .track-edit-duration{width:70px; flex:none;}
   .drag-handle{color:var(--text-muted); display:flex; flex:none;}
   .drag-handle svg{width:14px; height:18px;}
@@ -278,6 +279,11 @@ img{max-width:100%;}
   .track-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
   .track-artist{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; color:var(--text-muted); font-weight:400;}
   .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
+  .track-item .track-duration{font-size:1.05rem; font-weight:700;}
+  .track-programma{
+    color:var(--text-muted); font-size:.76rem; flex:none; padding:2px 7px; border:1px solid var(--border);
+    border-radius:999px;
+  }
 
   .library-filters{display:flex; gap:6px;}
   .library-filters .input{flex:1; min-width:0;}
@@ -322,8 +328,6 @@ img{max-width:100%;}
   .setlist-row.manual:active{cursor:grabbing;}
   .setlist-row.dragging{opacity:.4;}
   .setlist-rename-input{flex:1; min-width:0;}
-  .status-dot{width:9px; height:9px; border-radius:50%; flex:none; background:var(--warn);}
-  .status-dot.ok{background:var(--success);}
   .setlist-row-main{flex:1; min-width:0;}
   .setlist-row-name{display:block; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .setlist-row-meta{display:block; color:var(--text-muted); font-size:.8rem;}
@@ -345,6 +349,11 @@ img{max-width:100%;}
     background:transparent; color:var(--text); padding:4px 6px; border-radius:6px; width:100%;
   }
   #setlist-name-input:hover, #setlist-name-input:focus{border-color:var(--border); background:var(--surface-2);}
+  #setlist-date-input{
+    font-family:"IBM Plex Mono",monospace; font-size:.82rem; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text); padding:5px 8px; border-radius:6px; width:fit-content;
+    color-scheme:dark;
+  }
 
   .editor-stats{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .badge{
@@ -426,6 +435,7 @@ img{max-width:100%;}
       <input type="text" class="input" id="new-track-title" placeholder="Titel" aria-label="Titel van nieuw nummer" required>
       <input type="text" class="input" id="new-track-artist" placeholder="Artiest (optioneel)" aria-label="Oorspronkelijke artiest">
       <input type="text" class="input" id="new-track-genre" placeholder="Genre (optioneel)" aria-label="Genre" list="genre-datalist">
+      <input type="text" class="input" id="new-track-programma" placeholder="Programma (optioneel)" aria-label="Programma (piano-instelling)">
       <input type="text" class="input input-duration mono" id="new-track-duration" placeholder="mm:ss" aria-label="Duur (mm:ss)" required>
       <p class="field-error" id="add-track-error" hidden></p>
       <div class="modal-card-actions">
@@ -528,6 +538,17 @@ img{max-width:100%;}
     if (h>0) return h + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
     return m + ":" + String(s).padStart(2,"0");
   }
+  // Formats a <input type="date"> value ("YYYY-MM-DD") as a short Dutch date, e.g. "14 sep 2026".
+  function formatDateNl(dateStr){
+    if (!dateStr) return "";
+    var parts = String(dateStr).split("-");
+    if (parts.length !== 3) return "";
+    var y = parseInt(parts[0],10), m = parseInt(parts[1],10), d = parseInt(parts[2],10);
+    if (!y || !m || !d) return "";
+    var months = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+    if (m < 1 || m > 12) return "";
+    return d + " " + months[m-1] + " " + y;
+  }
   function csvEscape(v){
     v = String(v);
     if (/[";\n]/.test(v)) return '"' + v.replace(/"/g,'""') + '"';
@@ -627,8 +648,18 @@ img{max-width:100%;}
     root.setProperty("--accent-contrast", relativeLuminance(theme.accent) > 0.45 ? "#20120a" : "#fdf6f0");
   }
 
+  // ---------- display settings (per-device) ----------
+  var SHOW_PROGRAMMA_KEY = "setlist-studio:show-programma";
+  function loadShowProgrammaSetting(){
+    try{ return window.localStorage.getItem(SHOW_PROGRAMMA_KEY) === "1"; } catch(e){ return false; }
+  }
+  function saveShowProgrammaSetting(val){
+    try{ window.localStorage.setItem(SHOW_PROGRAMMA_KEY, val ? "1" : "0"); } catch(e){ /* ignore */ }
+  }
+
   var librarySearchTerm = "";
   var libraryGenreFilters = new Set();
+  var showProgrammaInLibrary = loadShowProgrammaSetting();
   var editingTrackId = null;
   var creatingSetlist = false;
   var renamingSetlistId = null;
@@ -801,7 +832,38 @@ img{max-width:100%;}
         '</button>' +
         '<input type="file" id="setlist-docx-input" accept=".docx" hidden>' +
       '</div>' +
+      backupSectionHtml() +
+      displaySectionHtml() +
       themeSectionHtml();
+  }
+
+  function backupSectionHtml(){
+    return '' +
+      '<div class="settings-divider"></div>' +
+      '<div class="settings-import">' +
+        '<h3 class="settings-subheading">Back-up</h3>' +
+        '<p class="hint">Bewaar een back-up van je hele bibliotheek en al je setlists, zodat je alles kunt terugzetten als er iets verwijderd wordt.</p>' +
+        '<button type="button" class="btn btn-ghost btn-small" id="backup-export-btn">' +
+          ICON_DOWNLOAD + ' Back-up downloaden' +
+        '</button>' +
+        '<button type="button" class="btn btn-ghost btn-small" id="backup-import-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>' +
+          ' Back-up herstellen' +
+        '</button>' +
+        '<input type="file" id="backup-import-input" accept=".json,application/json" hidden>' +
+      '</div>';
+  }
+
+  function displaySectionHtml(){
+    return '' +
+      '<div class="settings-divider"></div>' +
+      '<div class="settings-display">' +
+        '<h3 class="settings-subheading">Weergave</h3>' +
+        '<label class="settings-toggle">' +
+          '<input type="checkbox" id="show-programma-toggle"' + (showProgrammaInLibrary ? ' checked' : '') + '>' +
+          'Programmanummer tonen in de bibliotheeklijst' +
+        '</label>' +
+      '</div>';
   }
 
   function themeSectionHtml(){
@@ -1140,8 +1202,8 @@ img{max-width:100%;}
     renderSettingsPanel();
   }
 
-  async function addTrack(title, artist, durationSec, genre){
-    var data = {title: title, artist: artist || "", genre: genre || "", durationSec: durationSec, addedAt: Date.now()};
+  async function addTrack(title, artist, durationSec, genre, programma){
+    var data = {title: title, artist: artist || "", genre: genre || "", durationSec: durationSec, programma: programma || "", addedAt: Date.now()};
     if (usingDb){
       await db.collection("tracks").add(data);
     } else {
@@ -1152,13 +1214,13 @@ img{max-width:100%;}
     }
   }
 
-  async function updateTrack(id, title, artist, durationSec, genre){
+  async function updateTrack(id, title, artist, durationSec, genre, programma){
     if (usingDb){
-      await db.collection("tracks").doc(id).update({title: title, artist: artist || "", genre: genre || "", durationSec: durationSec});
+      await db.collection("tracks").doc(id).update({title: title, artist: artist || "", genre: genre || "", durationSec: durationSec, programma: programma || ""});
     } else {
       var t = tracksMap.get(id);
       if (t){
-        t.title = title; t.artist = artist || ""; t.genre = genre || ""; t.durationSec = durationSec;
+        t.title = title; t.artist = artist || ""; t.genre = genre || ""; t.durationSec = durationSec; t.programma = programma || "";
         persistLocal();
         renderLibrary(); renderActiveSetlist(); renderSetlistsList();
       }
@@ -1190,7 +1252,7 @@ img{max-width:100%;}
   }
 
   async function createSetlist(name){
-    var data = {name: name, trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
+    var data = {name: name, date: "", trackIds: [], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
     if (usingDb){
       var ref = await db.collection("setlists").add(data);
       activeSetlistId = ref.id;
@@ -1208,7 +1270,7 @@ img{max-width:100%;}
   // selected starts a new one for it, instead of the drop silently doing
   // nothing — same "Setlist N" default name as the manual "Nieuw" button.
   async function createSetlistWithTrack(name, trackId){
-    var data = {name: name, trackIds: [trackId], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
+    var data = {name: name, date: "", trackIds: [trackId], createdAt: Date.now(), updatedAt: Date.now(), sortIndex: Date.now()};
     if (usingDb){
       var ref = await db.collection("setlists").add(data);
       activeSetlistId = ref.id;
@@ -1228,6 +1290,15 @@ img{max-width:100%;}
     } else {
       var sl = setlistsMap.get(id);
       if (sl){ sl.name = name; sl.updatedAt = Date.now(); persistLocal(); renderSetlistsList(); }
+    }
+  }
+
+  async function updateSetlistDate(id, date){
+    if (usingDb){
+      await db.collection("setlists").doc(id).update({date: date || "", updatedAt:Date.now()});
+    } else {
+      var sl = setlistsMap.get(id);
+      if (sl){ sl.date = date || ""; sl.updatedAt = Date.now(); persistLocal(); renderSetlistsList(); }
     }
   }
 
@@ -1349,6 +1420,7 @@ img{max-width:100%;}
             '<input type="text" class="input track-edit-title" id="edit-title-' + t.id + '" value="' + escapeHtml(t.title) + '" aria-label="Titel bewerken" placeholder="Titel">' +
             '<input type="text" class="input track-edit-artist" id="edit-artist-' + t.id + '" value="' + escapeHtml(t.artist || "") + '" aria-label="Artiest bewerken" placeholder="Artiest">' +
             '<input type="text" class="input track-edit-genre" id="edit-genre-' + t.id + '" value="' + escapeHtml(t.genre || "") + '" aria-label="Genre bewerken" placeholder="Genre" list="genre-datalist">' +
+            '<input type="text" class="input track-edit-programma" id="edit-programma-' + t.id + '" value="' + escapeHtml(t.programma || "") + '" aria-label="Programma bewerken" placeholder="Programma">' +
             '<input type="text" class="input input-duration mono track-edit-duration" id="edit-duration-' + t.id + '" value="' + formatDuration(t.durationSec) + '" aria-label="Duur bewerken (mm:ss)">' +
             '<button type="button" class="icon-btn" data-action="save-track-edit" data-id="' + t.id + '" aria-label="Wijzigingen opslaan" title="Opslaan">' + ICON_CHECK + '</button>' +
             '<button type="button" class="icon-btn" data-action="cancel-track-edit" data-id="' + t.id + '" aria-label="Bewerken annuleren" title="Annuleren">' + ICON_X + '</button>' +
@@ -1363,6 +1435,7 @@ img{max-width:100%;}
             '<span class="track-title">' + escapeHtml(t.title) + '</span>' +
             (t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
           '</span>' +
+          (showProgrammaInLibrary && t.programma ? '<span class="track-programma mono" title="Programma">' + escapeHtml(t.programma) + '</span>' : '') +
           '<span class="track-duration mono">' + formatDuration(t.durationSec) + '</span>' +
           '<button type="button" class="icon-btn" data-action="edit-track" data-id="' + t.id + '" aria-label="Nummer bewerken" title="Bewerken">' + ICON_PENCIL + '</button>' +
           '<button type="button" class="icon-btn quick-add" data-action="quick-add" data-id="' + t.id + '" aria-label="Toevoegen aan actieve setlist" title="Toevoegen aan actieve setlist">' + ICON_PLUS + '</button>' +
@@ -1429,7 +1502,6 @@ img{max-width:100%;}
       if (sl.id === renamingSetlistId){
         return '' +
           '<div class="setlist-row renaming" data-id="' + sl.id + '">' +
-            '<span class="status-dot ' + (count >= 3 ? 'ok' : '') + '"></span>' +
             '<input type="text" class="input setlist-rename-input" id="rename-setlist-' + sl.id + '" value="' + escapeHtml(sl.name) + '" aria-label="Naam van de setlist bewerken">' +
             '<button type="button" class="icon-btn" data-action="save-setlist-rename" data-id="' + sl.id + '" aria-label="Naam opslaan" title="Opslaan">' + ICON_CHECK + '</button>' +
             '<button type="button" class="icon-btn" data-action="cancel-setlist-rename" data-id="' + sl.id + '" aria-label="Annuleren" title="Annuleren">' + ICON_X + '</button>' +
@@ -1443,10 +1515,9 @@ img{max-width:100%;}
           (manual ? ' draggable="true"' : '') +
           ' data-action="select-setlist" data-id="' + sl.id + '" role="button" tabindex="0">' +
           (manual ? '<span class="drag-handle" aria-hidden="true">' + ICON_HANDLE + '</span>' : '') +
-          '<span class="status-dot ' + (count >= 3 ? 'ok' : '') + '"></span>' +
           '<span class="setlist-row-main">' +
             '<span class="setlist-row-name">' + escapeHtml(sl.name) + '</span>' +
-            '<span class="setlist-row-meta">' + count + ' ' + plural(count,'nummer','nummers') + ' · ' + formatDuration(totalDurationFor(sl)) + '</span>' +
+            '<span class="setlist-row-meta">' + count + ' ' + plural(count,'nummer','nummers') + ' · ' + formatDuration(totalDurationFor(sl)) + (sl.date ? ' · ' + formatDateNl(sl.date) : '') + '</span>' +
           '</span>' +
           '<button type="button" class="icon-btn" data-action="rename-setlist" data-id="' + sl.id + '" aria-label="Naam wijzigen" title="Naam wijzigen">' + ICON_PENCIL + '</button>' +
           '<button type="button" class="icon-btn danger' + (confirming ? ' confirming' : '') + '" data-action="delete-setlist" data-id="' + sl.id + '" aria-label="' + (confirming ? "Klik nogmaals om te bevestigen" : "Setlist verwijderen") + '" title="Verwijderen">' + ICON_TRASH + '</button>' +
@@ -1498,6 +1569,7 @@ img{max-width:100%;}
     editorPanelEl.innerHTML = '' +
       '<div class="editor-header">' +
         '<input type="text" id="setlist-name-input" value="' + escapeHtml(sl.name) + '" aria-label="Naam van de setlist">' +
+        '<input type="date" id="setlist-date-input" value="' + escapeHtml(sl.date || "") + '" aria-label="Datum van de setlist">' +
         '<div class="editor-stats">' +
           '<span class="badge">' + count + ' ' + plural(count,'nummer','nummers') + '</span>' +
           '<span class="badge badge-duration">' + formatDuration(total) + '</span>' +
@@ -1759,7 +1831,7 @@ img{max-width:100%;}
   async function importTrackForSetlist(matchIndex, title, artist, durationSec){
     var existingId = findExistingTrackId(matchIndex, title, artist);
     if (existingId) return existingId;
-    var data = {title: title, artist: artist || "", genre: "", durationSec: durationSec || 0, addedAt: Date.now()};
+    var data = {title: title, artist: artist || "", genre: "", durationSec: durationSec || 0, programma: "", addedAt: Date.now()};
     var id;
     if (usingDb){
       var ref = await db.collection("tracks").add(data);
@@ -1775,7 +1847,7 @@ img{max-width:100%;}
   }
 
   async function importCreateSetlist(name, trackIds, sortIndex){
-    var data = {name: name, trackIds: trackIds, createdAt: Date.now(), updatedAt: Date.now(), sortIndex: sortIndex};
+    var data = {name: name, date: "", trackIds: trackIds, createdAt: Date.now(), updatedAt: Date.now(), sortIndex: sortIndex};
     if (usingDb){
       var ref = await db.collection("setlists").add(data);
       setlistsMap.set(ref.id, Object.assign({id:ref.id}, data));
@@ -1906,6 +1978,106 @@ img{max-width:100%;}
     } catch(e){ return false; }
   }
 
+  // Saves a blob for the user, preferring the Claude artifact's own
+  // download capability (same as track/setlist exports) and falling back
+  // to a plain-browser download outside Claude.
+  async function saveFileForUser(blob, filename){
+    try{
+      var downloads = (window.claude && window.claude.use) ? await window.claude.use("downloads") : null;
+      if (downloads){
+        await downloads.save({filename: filename, data: blob});
+        return true;
+      }
+    } catch(e){
+      if (e && e.code === "declined") return false;
+      // fall through to the plain-browser download below
+    }
+    return downloadBlobViaBrowser(blob, filename);
+  }
+
+  // ---------- full backup (export/import of everything) ----------
+  function buildBackupPayload(){
+    return {
+      app: "setlist-studio-backup",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      tracks: Array.from(tracksMap.values()),
+      setlists: Array.from(setlistsMap.values())
+    };
+  }
+
+  async function handleBackupExport(){
+    var payload = buildBackupPayload();
+    var json = JSON.stringify(payload, null, 2);
+    var blob = new Blob([json], {type:"application/json;charset=utf-8;"});
+    var stamp = new Date().toISOString().slice(0,10);
+    var ok = await saveFileForUser(blob, "setlist-studio-backup-" + stamp + ".json");
+    if (ok){
+      showBanner("Back-up gedownload (" + payload.tracks.length + " " + plural(payload.tracks.length,"nummer","nummers") + ", " + payload.setlists.length + " " + plural(payload.setlists.length,"setlist","setlists") + ").", "success");
+    } else {
+      showBanner("Back-up downloaden is niet gelukt.", "warn");
+    }
+  }
+
+  // Fully replaces the library and all setlists with the contents of a
+  // backup, preserving original ids so setlists keep pointing at the right
+  // tracks. In cloud mode the live onSnapshot listeners pick the change up
+  // and re-render automatically once the writes land.
+  async function restoreFromBackup(payload){
+    var tracks = Array.isArray(payload.tracks) ? payload.tracks.filter(function(t){ return t && t.id; }) : [];
+    var setlists = Array.isArray(payload.setlists) ? payload.setlists.filter(function(s){ return s && s.id; }) : [];
+
+    if (usingDb){
+      var deleteTasks = [];
+      tracksMap.forEach(function(t){ deleteTasks.push(db.collection("tracks").doc(t.id).delete()); });
+      setlistsMap.forEach(function(s){ deleteTasks.push(db.collection("setlists").doc(s.id).delete()); });
+      await Promise.all(deleteTasks);
+
+      var writeTasks = [];
+      tracks.forEach(function(t){
+        var data = Object.assign({}, t); delete data.id;
+        writeTasks.push(db.collection("tracks").doc(t.id).set(data));
+      });
+      setlists.forEach(function(s){
+        var data = Object.assign({}, s); delete data.id;
+        writeTasks.push(db.collection("setlists").doc(s.id).set(data));
+      });
+      await Promise.all(writeTasks);
+    } else {
+      tracksMap.clear();
+      setlistsMap.clear();
+      tracks.forEach(function(t){ tracksMap.set(t.id, t); });
+      setlists.forEach(function(s){ setlistsMap.set(s.id, s); });
+      activeSetlistId = null;
+      persistLocal();
+      renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+    }
+    renderSettingsPanel();
+    showBanner("Back-up hersteld: " + tracks.length + " " + plural(tracks.length,"nummer","nummers") + " en " + setlists.length + " " + plural(setlists.length,"setlist","setlists") + ".", "success");
+  }
+
+  function handleBackupImportFile(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var payload;
+      try{ payload = JSON.parse(String(reader.result)); }
+      catch(e){ showBanner("Dit bestand is geen geldige back-up (ongeldige JSON).", "warn"); return; }
+      if (!payload || !Array.isArray(payload.tracks) || !Array.isArray(payload.setlists)){
+        showBanner("Dit bestand is geen geldige setlist-studio back-up.", "warn");
+        return;
+      }
+      var msg = "Dit vervangt je huidige bibliotheek (" + tracksMap.size + " " + plural(tracksMap.size,"nummer","nummers") +
+        ") en al je setlists (" + setlistsMap.size + ") door de back-up (" + payload.tracks.length + " " + plural(payload.tracks.length,"nummer","nummers") +
+        ", " + payload.setlists.length + " " + plural(payload.setlists.length,"setlist","setlists") + "). Dit kan niet ongedaan worden gemaakt. Doorgaan?";
+      if (!window.confirm(msg)) return;
+      restoreFromBackup(payload).catch(function(e){
+        showBanner("Herstellen van de back-up is mislukt: " + (e && e.message ? e.message : "onbekende fout") + ".", "warn");
+      });
+    };
+    reader.onerror = function(){ showBanner("Bestand kon niet worden gelezen.", "warn"); };
+    reader.readAsText(file);
+  }
+
   // Word export: a real, minimal .docx (Open XML) package built by hand
   // and zipped with JSZip (lazy-loaded from cdnjs, like jsPDF below).
   // A plain HTML-saved-as-.doc file was considered but the platform's
@@ -1945,8 +2117,9 @@ img{max-width:100%;}
       var title = t ? t.title : "(verwijderd nummer)";
       var artist = t ? (t.artist || "") : "";
       var dur = t ? t.durationSec : 0;
+      var programma = t ? (t.programma || "") : "";
       total += dur;
-      var meta = (artist ? escapeHtml(artist) + " – " : "") + escapeHtml(formatDuration(dur));
+      var meta = (artist ? escapeHtml(artist) + " – " : "") + escapeHtml(formatDuration(dur)) + (programma ? " · " + escapeHtml(programma) : "");
       trackParagraphs += '' +
         '<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>' +
           '<w:r><w:rPr><w:sz w:val="44"/><w:szCs w:val="44"/></w:rPr><w:t xml:space="preserve">' + escapeHtml(title) + '</w:t></w:r>' +
@@ -2046,13 +2219,14 @@ img{max-width:100%;}
       var title = t ? t.title : "(verwijderd nummer)";
       var artist = t ? (t.artist || "") : "";
       var dur = t ? t.durationSec : 0;
+      var programma = t ? (t.programma || "") : "";
       total += dur;
       if (y > pageHeight - 100){ doc.addPage(); y = 80; }
       doc.setFont("helvetica","normal"); doc.setFontSize(22); doc.setTextColor(20);
       doc.text(title, centerX, y, {align:"center"});
       y += 24;
       doc.setFontSize(12);
-      var meta = (artist ? artist + " – " : "") + formatDuration(dur);
+      var meta = (artist ? artist + " – " : "") + formatDuration(dur) + (programma ? " · " + programma : "");
       doc.text(meta, centerX, y, {align:"center"});
       y += 40;
     });
@@ -2318,24 +2492,26 @@ img{max-width:100%;}
     var titleInput = document.getElementById("edit-title-" + id);
     var artistInput = document.getElementById("edit-artist-" + id);
     var genreInput = document.getElementById("edit-genre-" + id);
+    var programmaInput = document.getElementById("edit-programma-" + id);
     var durInput = document.getElementById("edit-duration-" + id);
     if (!titleInput || !durInput) return;
     var title = titleInput.value.trim();
     var artist = artistInput ? artistInput.value.trim() : "";
     var genre = genreInput ? genreInput.value.trim() : "";
+    var programma = programmaInput ? programmaInput.value.trim() : "";
     var dur = parseDuration(durInput.value);
     if (!title){ showBanner("Vul een titel in.", "warn"); titleInput.focus(); return; }
     if (dur == null){ showBanner("Gebruik het formaat mm:ss, bijvoorbeeld 3:45.", "warn"); durInput.focus(); return; }
     editingTrackId = null;
-    updateTrack(id, title, artist, dur, genre);
+    updateTrack(id, title, artist, dur, genre, programma);
     renderLibrary();
   }
   libraryPanel.addEventListener("keydown", function(e){
-    var isEditField = e.target.classList && (e.target.classList.contains("track-edit-title") || e.target.classList.contains("track-edit-artist") || e.target.classList.contains("track-edit-genre") || e.target.classList.contains("track-edit-duration"));
+    var isEditField = e.target.classList && (e.target.classList.contains("track-edit-title") || e.target.classList.contains("track-edit-artist") || e.target.classList.contains("track-edit-genre") || e.target.classList.contains("track-edit-programma") || e.target.classList.contains("track-edit-duration"));
     if (!isEditField) return;
     if (e.key === "Enter"){
       e.preventDefault();
-      var id = e.target.id.replace(/^edit-(title|artist|genre|duration)-/, "");
+      var id = e.target.id.replace(/^edit-(title|artist|genre|programma|duration)-/, "");
       commitTrackEdit(id);
     } else if (e.key === "Escape"){
       editingTrackId = null;
@@ -2389,16 +2565,18 @@ img{max-width:100%;}
         var titleInput = document.getElementById("new-track-title");
         var artistInput = document.getElementById("new-track-artist");
         var genreInput = document.getElementById("new-track-genre");
+        var programmaInput = document.getElementById("new-track-programma");
         var durInput = document.getElementById("new-track-duration");
         var errorEl = document.getElementById("add-track-error");
         var title = titleInput.value.trim();
         var artist = artistInput.value.trim();
         var genre = genreInput.value.trim();
+        var programma = programmaInput ? programmaInput.value.trim() : "";
         var dur = parseDuration(durInput.value);
         if (!title){ errorEl.textContent = "Vul een titel in."; errorEl.hidden = false; titleInput.focus(); return; }
         if (dur == null){ errorEl.textContent = "Gebruik het formaat mm:ss, bijvoorbeeld 3:45."; errorEl.hidden = false; durInput.focus(); return; }
         errorEl.hidden = true;
-        addTrack(title, artist, dur, genre);
+        addTrack(title, artist, dur, genre, programma);
         closeAddTrackModal();
       }
     });
@@ -2641,6 +2819,12 @@ img{max-width:100%;}
       var sl = setlistsMap.get(activeSetlistId);
       if (sl && val && val !== sl.name) renameSetlist(activeSetlistId, val);
       else if (sl) e.target.value = sl.name;
+    }
+  });
+  editorPanelEl.addEventListener("change", function(e){
+    if (e.target.id === "setlist-date-input" && activeSetlistId){
+      var sl = setlistsMap.get(activeSetlistId);
+      if (sl && e.target.value !== (sl.date || "")) updateSetlistDate(activeSetlistId, e.target.value);
     }
   });
   editorPanelEl.addEventListener("keydown", function(e){
@@ -2928,6 +3112,15 @@ img{max-width:100%;}
         renderSettingsPanel();
         return;
       }
+      if (e.target.id === "backup-export-btn" || (e.target.closest && e.target.closest("#backup-export-btn"))){
+        handleBackupExport();
+        return;
+      }
+      if (e.target.id === "backup-import-btn" || (e.target.closest && e.target.closest("#backup-import-btn"))){
+        var backupInput = document.getElementById("backup-import-input");
+        if (backupInput) backupInput.click();
+        return;
+      }
     });
     settingsPanelEl.addEventListener("input", function(e){
       if (!e.target.id || e.target.id.indexOf("theme-") !== 0) return;
@@ -2956,10 +3149,22 @@ img{max-width:100%;}
         handleToggleRequireLogin(e.target.checked);
         return;
       }
+      if (e.target.id === "show-programma-toggle"){
+        showProgrammaInLibrary = e.target.checked;
+        saveShowProgrammaSetting(showProgrammaInLibrary);
+        renderLibrary();
+        return;
+      }
       if (e.target.id === "file-input"){
         var file = e.target.files && e.target.files[0];
         e.target.value = "";
         if (file) handleFileImport(file);
+        return;
+      }
+      if (e.target.id === "backup-import-input"){
+        var backupFile = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (backupFile) handleBackupImportFile(backupFile);
         return;
       }
       if (e.target.id === "setlist-docx-input"){
