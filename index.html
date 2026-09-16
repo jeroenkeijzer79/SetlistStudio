@@ -47,6 +47,13 @@
   input,button{font-size:15px;}
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;}
 
+  /* Scrollbars in the page's own palette instead of the browser default. */
+  *{ scrollbar-width:thin; scrollbar-color:var(--border) var(--surface); }
+  *::-webkit-scrollbar{ width:10px; height:10px; }
+  *::-webkit-scrollbar-track{ background:var(--surface); }
+  *::-webkit-scrollbar-thumb{ background:var(--border); border-radius:6px; border:2px solid var(--surface); }
+  *::-webkit-scrollbar-thumb:hover{ background:var(--accent); }
+
   .app{display:flex; flex-direction:column; gap:18px;}
 
   .topbar{
@@ -268,6 +275,8 @@
   #library-genre-filter{flex:0 0 auto; width:auto; max-width:44%; cursor:pointer;}
   #open-add-track-btn{flex:none; padding:8px 10px;}
   #open-add-track-btn svg{width:16px; height:16px;}
+  #open-add-existing-track-btn{flex:none; padding:8px 10px;}
+  #open-add-existing-track-btn svg{width:16px; height:16px;}
 
   .empty-state{
     text-align:center; padding:26px 12px; color:var(--text-muted); font-size:.9rem;
@@ -316,7 +325,7 @@
   .editor-actions{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;}
 
   #setlist-track-list{
-    display:flex; flex-direction:column; gap:6px; min-height:120px; padding:10px;
+    display:flex; flex-direction:column; gap:6px; min-height:120px; padding:10px; margin-top:12px;
     border:1px dashed var(--border); border-radius:8px; background:var(--surface-2);
   }
   .setlist-track-item{
@@ -675,6 +684,16 @@
           ' Bestand kiezen' +
         '</button>' +
         '<input type="file" id="file-input" accept=".csv,.txt,text/csv,text/plain" hidden>' +
+      '</div>' +
+      '<div class="settings-divider"></div>' +
+      '<div class="settings-import">' +
+        '<h3 class="settings-subheading">Setlists importeren (Word)</h3>' +
+        '<p class="hint">Eén setlist per pagina — de naam en de nummers op elke pagina worden automatisch herkend.</p>' +
+        '<button type="button" class="btn btn-ghost btn-small" id="upload-setlists-btn">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>' +
+          ' Bestand kiezen' +
+        '</button>' +
+        '<input type="file" id="setlist-docx-input" accept=".docx" hidden>' +
       '</div>';
   }
 
@@ -1302,7 +1321,7 @@
             : '<span class="badge warn">Nog ' + needed + ' ' + plural(needed,'nummer','nummers') + ' nodig (min. 3)</span>') +
           '<span class="editor-actions">' +
             (tracksMap.size === 0 ? '' :
-              '<button type="button" class="icon-btn" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
+              '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
             '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="pdf"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' PDF</button>' +
             '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="docx"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Word</button>' +
           '</span>' +
@@ -1377,6 +1396,299 @@
     var msg = result.added + " " + plural(result.added,"nummer","nummers") + " toegevoegd";
     if (result.skipped > 0) msg += ", " + result.skipped + " " + plural(result.skipped,"regel","regels") + " overgeslagen (onherkenbaar formaat)";
     showBanner(msg + ".", "success");
+  }
+
+  // ---------- Setlists import (Word/.docx) ----------
+  // Reads an existing multi-page setlist document — one setlist per page,
+  // pages separated by a manual page break, a "page break before"
+  // paragraph setting, or a section break — and turns each page into its
+  // own setlist. Track lines are matched against the existing library by
+  // title (and artist, when known) so re-importing doesn't duplicate
+  // library entries; unmatched tracks are added to the library.
+  function docxLocalName(el){
+    return el.localName || String(el.nodeName || "").replace(/^.*:/, "");
+  }
+
+  function docxParagraphText(pEl){
+    var text = "";
+    (function walk(node){
+      var children = node.childNodes;
+      for (var i=0; i<children.length; i++){
+        var child = children[i];
+        if (child.nodeType !== 1) continue;
+        var ln = docxLocalName(child);
+        if (ln === "t"){
+          text += child.textContent || "";
+        } else if (ln === "tab"){
+          text += " ";
+        } else if (ln === "br" || ln === "cr"){
+          var brType = child.getAttribute && (child.getAttribute("w:type") || child.getAttribute("type"));
+          text += (brType === "page") ? "\f" : "\n";
+        } else if (ln !== "pPr" && ln !== "rPr"){
+          walk(child);
+        }
+      }
+    })(pEl);
+    return text;
+  }
+
+  function extractDocxPages(documentXmlText){
+    var xmlDoc = new DOMParser().parseFromString(documentXmlText, "application/xml");
+    if (xmlDoc.getElementsByTagName("parsererror").length){
+      throw new Error("Kon het Word-bestand niet lezen (onherkenbare inhoud)");
+    }
+    var body = null;
+    var all = xmlDoc.getElementsByTagName("*");
+    for (var i=0; i<all.length; i++){
+      if (docxLocalName(all[i]) === "body"){ body = all[i]; break; }
+    }
+    if (!body) throw new Error("Geen documentinhoud gevonden in het Word-bestand");
+
+    var pages = [];
+    var currentLines = [];
+    function pushLine(line){
+      line = line.replace(/\s+/g, " ").trim();
+      if (line) currentLines.push(line);
+    }
+    function endPage(){
+      if (currentLines.length) pages.push(currentLines.join("\n"));
+      currentLines = [];
+    }
+
+    var children = body.children;
+    for (var c=0; c<children.length; c++){
+      var el = children[c];
+      if (docxLocalName(el) !== "p") continue;
+      var pPr = null;
+      for (var k=0; k<el.children.length; k++){
+        if (docxLocalName(el.children[k]) === "pPr"){ pPr = el.children[k]; break; }
+      }
+      var hasPageBreakBefore = false, hasSectPr = false;
+      if (pPr){
+        for (var m=0; m<pPr.children.length; m++){
+          var pn = docxLocalName(pPr.children[m]);
+          if (pn === "pageBreakBefore") hasPageBreakBefore = true;
+          if (pn === "sectPr") hasSectPr = true;
+        }
+      }
+      if (hasPageBreakBefore) endPage();
+
+      var raw = docxParagraphText(el);
+      var segments = raw.split("\f");
+      for (var s=0; s<segments.length; s++){
+        if (s > 0) endPage();
+        // A plain <w:br/> inside this paragraph (e.g. between a track's
+        // title and its "artiest – duur" line) becomes "\n" in the raw
+        // text above — split on it too, so each becomes its own line
+        // instead of being collapsed into one by pushLine's whitespace trim.
+        var segLines = segments[s].split("\n");
+        for (var sl=0; sl<segLines.length; sl++){
+          pushLine(segLines[sl]);
+        }
+      }
+
+      if (hasSectPr) endPage();
+    }
+    endPage();
+    return pages;
+  }
+
+  // Strips a line that repeats identically across most pages (e.g. a
+  // "JEROEN & IRENE" heading printed at the top of every page) so it isn't
+  // mistaken for a setlist name or a track.
+  function stripRepeatedHeaderLines(pageLineArrays){
+    if (pageLineArrays.length < 2) return pageLineArrays;
+    var firstLineCounts = new Map();
+    pageLineArrays.forEach(function(lines){
+      if (!lines.length) return;
+      var key = lines[0].toLowerCase();
+      firstLineCounts.set(key, (firstLineCounts.get(key) || 0) + 1);
+    });
+    var threshold = Math.max(2, Math.ceil(pageLineArrays.length / 2));
+    return pageLineArrays.map(function(lines){
+      if (lines.length && firstLineCounts.get(lines[0].toLowerCase()) >= threshold){
+        return lines.slice(1);
+      }
+      return lines;
+    });
+  }
+
+  var DOCX_IMPORT_DURATION_RE = /(\d{1,2}:[0-5]\d:[0-5]\d|\d{1,2}:[0-5]\d)/;
+  var DOCX_IMPORT_SEP_RE = /\s[–—-]\s/;
+
+  // Duration-anchored line parser: a track is either two lines (a title
+  // line with no duration, followed by an "artiest – mm:ss" line — the
+  // shape our own exports use) or one line that has both ("Titel – Artiest
+  // – 3:45"). Whichever line carries the duration closes out the track.
+  function parseImportedTrackLines(lines){
+    var tracks = [];
+    var pendingTitle = null;
+    function flushPendingAsTitleOnly(){
+      if (pendingTitle){
+        tracks.push({title: pendingTitle, artist: "", durationSec: 0, durationKnown: false});
+        pendingTitle = null;
+      }
+    }
+    lines.forEach(function(rawLine){
+      var line = rawLine.replace(/^\d+[.)]\s*/, "").trim();
+      if (!line) return;
+      var durMatch = line.match(DOCX_IMPORT_DURATION_RE);
+      if (!durMatch){
+        flushPendingAsTitleOnly();
+        pendingTitle = line;
+        return;
+      }
+      var durationSec = parseDuration(durMatch[1]);
+      var rest = (line.slice(0, durMatch.index) + line.slice(durMatch.index + durMatch[0].length))
+        .replace(/[()]/g, " ")
+        .trim()
+        .replace(/^[–—-]\s*/, "")
+        .replace(/\s*[–—-]$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (pendingTitle){
+        tracks.push({title: pendingTitle, artist: rest, durationSec: durationSec || 0, durationKnown: durationSec != null});
+        pendingTitle = null;
+        return;
+      }
+      if (!rest) return; // a line that's only a duration, nothing to anchor it to
+      var parts = rest.split(DOCX_IMPORT_SEP_RE);
+      var title = parts.shift().trim();
+      var artist = parts.join(" – ").trim();
+      if (title){
+        tracks.push({title: title, artist: artist, durationSec: durationSec || 0, durationKnown: durationSec != null});
+      }
+    });
+    flushPendingAsTitleOnly();
+    return tracks;
+  }
+
+  function findExistingTrackId(matchIndex, title, artist){
+    var key = (title||"").trim().toLowerCase() + "|" + (artist||"").trim().toLowerCase();
+    if (matchIndex.byTitleArtist.has(key)) return matchIndex.byTitleArtist.get(key);
+    var titleOnlyKey = (title||"").trim().toLowerCase();
+    if (matchIndex.byTitle.has(titleOnlyKey)) return matchIndex.byTitle.get(titleOnlyKey);
+    return null;
+  }
+
+  async function importTrackForSetlist(matchIndex, title, artist, durationSec){
+    var existingId = findExistingTrackId(matchIndex, title, artist);
+    if (existingId) return existingId;
+    var data = {title: title, artist: artist || "", genre: "", durationSec: durationSec || 0, addedAt: Date.now()};
+    var id;
+    if (usingDb){
+      var ref = await db.collection("tracks").add(data);
+      id = ref.id;
+    } else {
+      id = uid();
+    }
+    tracksMap.set(id, Object.assign({id:id}, data));
+    matchIndex.byTitleArtist.set((title||"").trim().toLowerCase() + "|" + (artist||"").trim().toLowerCase(), id);
+    var titleOnlyKey = (title||"").trim().toLowerCase();
+    if (!matchIndex.byTitle.has(titleOnlyKey)) matchIndex.byTitle.set(titleOnlyKey, id);
+    return id;
+  }
+
+  async function importCreateSetlist(name, trackIds, sortIndex){
+    var data = {name: name, trackIds: trackIds, createdAt: Date.now(), updatedAt: Date.now(), sortIndex: sortIndex};
+    if (usingDb){
+      var ref = await db.collection("setlists").add(data);
+      setlistsMap.set(ref.id, Object.assign({id:ref.id}, data));
+      return ref.id;
+    }
+    var id = uid();
+    setlistsMap.set(id, Object.assign({id:id}, data));
+    return id;
+  }
+
+  async function handleSetlistDocxImport(file){
+    showBanner("Bezig met het lezen van het Word-bestand…");
+    var JSZipCtor;
+    try{
+      JSZipCtor = await loadJsZip();
+    } catch(e){
+      showBanner("Kon JSZip niet laden om het Word-bestand te lezen. Controleer je internetverbinding.", "warn");
+      return;
+    }
+    var pages;
+    try{
+      var buffer = await file.arrayBuffer();
+      var zip = await JSZipCtor.loadAsync(buffer);
+      var docEntry = zip.file("word/document.xml");
+      if (!docEntry) throw new Error("Dit lijkt geen geldig Word-bestand (.docx) te zijn");
+      var xmlText = await docEntry.async("string");
+      pages = extractDocxPages(xmlText);
+    } catch(e){
+      showBanner("Kon het Word-bestand niet verwerken: " + (e && e.message ? e.message : "onbekende fout") + ".", "warn");
+      return;
+    }
+    if (pages.length === 0){
+      showBanner("Geen pagina's met inhoud gevonden in het Word-bestand.", "warn");
+      return;
+    }
+
+    var pageLineArrays = stripRepeatedHeaderLines(pages.map(function(p){
+      return p.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+    }));
+
+    var matchIndex = {byTitleArtist: new Map(), byTitle: new Map()};
+    tracksMap.forEach(function(t, id){
+      var key = (t.title||"").trim().toLowerCase() + "|" + (t.artist||"").trim().toLowerCase();
+      matchIndex.byTitleArtist.set(key, id);
+      var titleKey = (t.title||"").trim().toLowerCase();
+      if (!matchIndex.byTitle.has(titleKey)) matchIndex.byTitle.set(titleKey, id);
+    });
+
+    var maxSortIndex = 0;
+    setlistsMap.forEach(function(sl){
+      if (typeof sl.sortIndex === "number" && sl.sortIndex > maxSortIndex) maxSortIndex = sl.sortIndex;
+    });
+
+    var setlistsCreated = 0, tracksMatched = 0, tracksCreated = 0, pagesSkipped = 0, tracksNeedDuration = 0;
+
+    for (var p=0; p<pageLineArrays.length; p++){
+      var lines = pageLineArrays[p].filter(function(l){ return !/^totale?\s*duur/i.test(l); });
+      if (!lines.length){ pagesSkipped++; continue; }
+      var name = lines[0];
+      var trackLines = lines.slice(1);
+      var parsedTracks = parseImportedTrackLines(trackLines);
+      if (parsedTracks.length === 0){ pagesSkipped++; continue; }
+
+      var trackIds = [];
+      for (var t=0; t<parsedTracks.length; t++){
+        var pt = parsedTracks[t];
+        var existed = findExistingTrackId(matchIndex, pt.title, pt.artist) != null;
+        var id = await importTrackForSetlist(matchIndex, pt.title, pt.artist, pt.durationSec);
+        trackIds.push(id);
+        if (existed) tracksMatched++; else tracksCreated++;
+        if (!pt.durationKnown) tracksNeedDuration++;
+      }
+
+      maxSortIndex += 1;
+      await importCreateSetlist(name || ("Geïmporteerde setlist " + (setlistsCreated+1)), trackIds, maxSortIndex);
+      setlistsCreated++;
+    }
+
+    if (!usingDb) persistLocal();
+    renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+
+    if (setlistsCreated === 0){
+      showBanner("Er konden geen setlists worden herkend in dit Word-bestand.", "warn");
+      return;
+    }
+    var msg = setlistsCreated + " " + plural(setlistsCreated,"setlist","setlists") + " geïmporteerd" +
+      " (" + tracksMatched + " " + plural(tracksMatched,"nummer","nummers") + " herkend uit je bibliotheek, " +
+      tracksCreated + " nieuw toegevoegd)";
+    if (tracksNeedDuration > 0){
+      msg += ". Let op: bij " + tracksNeedDuration + " " + plural(tracksNeedDuration,"nummer","nummers") +
+        " kon geen duur worden herkend — pas deze aan in de bibliotheek.";
+    } else {
+      msg += ".";
+    }
+    if (pagesSkipped > 0){
+      msg += " " + pagesSkipped + " lege of onherkenbare " + plural(pagesSkipped,"pagina","pagina's") + " overgeslagen.";
+    }
+    showBanner(msg, tracksNeedDuration > 0 ? "warn" : "success");
   }
 
   function buildSetlistCsv(sl){
@@ -1681,9 +1993,10 @@
       mutateSetlist(activeSetlistId, function(ids){
         var copy = ids.slice();
         var moved = copy.splice(fromIdx, 1)[0];
-        var insertAt = idx;
-        if (fromIdx < idx) insertAt -= 1;
-        copy.splice(insertAt, 0, moved);
+        // idx already comes from getDropIndex(), which excludes the
+        // dragged item from its own indexing — so it's already an index
+        // into `copy` (post-removal) and needs no further adjustment.
+        copy.splice(idx, 0, moved);
         return copy;
       });
     }
@@ -1937,9 +2250,10 @@
     if (fromIdx === -1) return;
     var copy = currentOrder.slice();
     var moved = copy.splice(fromIdx, 1)[0];
-    var insertAt = idx;
-    if (fromIdx < idx) insertAt -= 1;
-    copy.splice(insertAt, 0, moved);
+    // idx already comes from getDropIndex(), which excludes the dragged
+    // row from its own indexing — so it's already an index into `copy`
+    // (post-removal) and needs no further adjustment.
+    copy.splice(idx, 0, moved);
     reorderSetlistsManual(copy);
   });
   setlistsPanel.addEventListener("click", function(e){
@@ -2341,6 +2655,11 @@
         if (fileInput) fileInput.click();
         return;
       }
+      if (e.target.id === "upload-setlists-btn" || (e.target.closest && e.target.closest("#upload-setlists-btn"))){
+        var setlistFileInput = document.getElementById("setlist-docx-input");
+        if (setlistFileInput) setlistFileInput.click();
+        return;
+      }
     });
     settingsPanelEl.addEventListener("submit", function(e){
       if (e.target.id === "settings-login-form"){
@@ -2360,6 +2679,12 @@
         var file = e.target.files && e.target.files[0];
         e.target.value = "";
         if (file) handleFileImport(file);
+        return;
+      }
+      if (e.target.id === "setlist-docx-input"){
+        var docxFile = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (docxFile) handleSetlistDocxImport(docxFile);
       }
     });
   }
