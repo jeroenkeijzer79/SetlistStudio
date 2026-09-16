@@ -84,6 +84,25 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .settings-help code{background:var(--surface-2); padding:1px 5px; border-radius:4px; font-family:"IBM Plex Mono",monospace; font-size:.82rem;}
   #firebase-config-input{font-family:"IBM Plex Mono",monospace; font-size:.8rem; resize:vertical;}
 
+  .auth-gate{
+    position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--bg) 80%, black); padding:16px;
+  }
+  .auth-gate-card{
+    display:flex; flex-direction:column; gap:12px; width:100%; max-width:360px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:24px;
+  }
+  .auth-gate-card h2{font-family:"Poppins",sans-serif; font-size:1.2rem; font-weight:700;}
+  .auth-gate-card .hint{margin:-4px 0 0;}
+
+  .settings-divider{height:1px; background:var(--border); margin:2px 0;}
+  .login-status{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+  .login-form{display:flex; gap:6px; flex-wrap:wrap;}
+  .login-form .input{flex:1; min-width:110px;}
+  .settings-toggle{display:flex; align-items:center; gap:8px; font-size:.88rem;}
+  .settings-toggle input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent);}
+
   .banner{
     border-radius:var(--radius); padding:12px 16px; font-size:.9rem; font-weight:500;
     border:1px solid var(--border); background:var(--surface-2); color:var(--text);
@@ -97,7 +116,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     display:grid;
     /* fr-based tracks scale proportionally as the window resizes;
        dragging a handle sets a new ratio (see resize JS below). */
-    grid-template-columns: minmax(240px, var(--w-library, 1.75fr)) 14px minmax(240px, var(--w-setlists, 1.55fr)) 14px minmax(320px, 1fr);
+    /* The three named tracks below are POSITIONAL (slot 1/2/3, left to
+       right), not tied to a specific panel's identity — which panel's
+       content lands in which track is controlled by the `order` CSS
+       property, set from panelOrder in JS, so blocks can be rearranged
+       while each slot keeps its own resizable width. */
+    grid-template-columns: minmax(240px, var(--w-col1, 1.75fr)) 14px minmax(240px, var(--w-col2, 1.55fr)) 14px minmax(320px, 1fr);
     gap:0; align-items:start;
   }
   .resize-handle{
@@ -147,6 +171,11 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .icon-btn.danger:hover{background:color-mix(in srgb, var(--danger) 16%, transparent); color:var(--danger);}
   .icon-btn.confirming{background:var(--danger); color:var(--danger-contrast);}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
+  .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
+
+  .panel-reorder{display:inline-flex; gap:2px; margin-left:auto;}
+  .panel-reorder .icon-btn{width:26px; height:26px;}
+  .panel-reorder .icon-btn svg{width:14px; height:14px;}
 
   .input{
     width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
@@ -177,13 +206,23 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   .track-item.editing{cursor:default;}
   .track-edit-title{flex:1.3; min-width:0;}
   .track-edit-artist{flex:1; min-width:0;}
+  .track-edit-genre{flex:.8; min-width:0;}
   .track-edit-duration{width:70px; flex:none;}
   .drag-handle{color:var(--text-muted); display:flex; flex:none;}
   .drag-handle svg{width:14px; height:18px;}
   .track-info{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px;}
   .track-title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;}
   .track-artist{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.76rem; color:var(--text-muted); font-weight:400;}
+  .track-genre{
+    align-self:flex-start; display:inline-flex; align-items:center; margin-top:2px; padding:1px 8px;
+    border-radius:999px; font-size:.7rem; font-weight:600; color:var(--text-muted);
+    border:1px solid var(--border); background:var(--surface-2); white-space:nowrap;
+  }
   .track-duration{color:var(--text-muted); font-size:.88rem; flex:none;}
+
+  .library-filters{display:flex; gap:6px;}
+  .library-filters .input{flex:1; min-width:0;}
+  #library-genre-filter{flex:0 0 auto; width:auto; max-width:44%; cursor:pointer;}
 
   .empty-state{
     text-align:center; padding:26px 12px; color:var(--text-muted); font-size:.9rem;
@@ -261,8 +300,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       </span>
       <div>
-        <h1>Jeroen & Irene - Setlist Studio <span class="topbar-flourish" aria-hidden="true"></span></h1>
-        <!-- <p class="topbar-sub">Bibliotheek opbouwen, setlists slepen, duur automatisch berekend</p> -->
+        <h1>Jeroen & Irene - Setlist Studio <span class="topbar-flourish" aria-hidden="true">✳</span></h1>
+        <p class="topbar-sub">Bibliotheek opbouwen, setlists slepen, duur automatisch berekend</p>
       </div>
     </div>
     <div class="topbar-stats">
@@ -278,6 +317,17 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
 
   <div id="banner" class="banner" hidden role="status"></div>
 
+  <div id="auth-gate" class="auth-gate" hidden role="dialog" aria-modal="true" aria-label="Inloggen vereist">
+    <form id="auth-gate-form" class="auth-gate-card">
+      <h2>Inloggen vereist</h2>
+      <p class="hint">Deze setlist-omgeving is afgeschermd. Vraag Jeroen om een gebruikersnaam en wachtwoord.</p>
+      <input type="text" class="input" id="auth-gate-username" placeholder="Gebruikersnaam" aria-label="Gebruikersnaam" autocomplete="username" required>
+      <input type="password" class="input" id="auth-gate-password" placeholder="Wachtwoord" aria-label="Wachtwoord" autocomplete="current-password" required>
+      <p class="field-error" id="auth-gate-error" hidden></p>
+      <button type="submit" class="btn btn-accent" id="auth-gate-submit">Inloggen</button>
+    </form>
+  </div>
+
   <main class="layout">
     <section class="panel panel-library" aria-label="Bibliotheek" id="panel-library">
       <div class="panel-header">
@@ -288,24 +338,31 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         </button>
         <input type="file" id="file-input" accept=".csv,.txt,text/csv,text/plain" hidden>
       </div>
-      <!--<p class="hint">Kolommen: titel, duur(mm:ss), duur(sec), artiest (optioneel)</p> -->
+      <p class="hint">Kolommen: titel, duur(mm:ss), duur(sec), artiest, genre (beide optioneel)</p>
 
-      <input type="search" class="input" id="library-search" placeholder="Zoek nummer…" aria-label="Zoek in bibliotheek">
+      <div class="library-filters">
+        <input type="search" class="input" id="library-search" placeholder="Zoek nummer…" aria-label="Zoek in bibliotheek">
+        <select id="library-genre-filter" class="input" aria-label="Filter op genre">
+          <option value="">Alle genres</option>
+        </select>
+      </div>
 
       <form id="add-track-form" class="add-track-form">
         <input type="text" class="input" id="new-track-title" placeholder="Titel" aria-label="Titel van nieuw nummer" required>
         <input type="text" class="input" id="new-track-artist" placeholder="Artiest (optioneel)" aria-label="Oorspronkelijke artiest">
+        <input type="text" class="input" id="new-track-genre" placeholder="Genre (optioneel)" aria-label="Genre" list="genre-datalist">
         <input type="text" class="input input-duration mono" id="new-track-duration" placeholder="mm:ss" aria-label="Duur (mm:ss)" required>
         <button type="submit" class="btn btn-accent" aria-label="Nummer toevoegen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
         </button>
       </form>
+      <datalist id="genre-datalist"></datalist>
       <p class="field-error" id="add-track-error" hidden></p>
 
       <div class="library-list" id="library-list"></div>
     </section>
 
-    <div class="resize-handle" id="resize-handle-library" role="separator" aria-orientation="vertical" aria-label="Breedte bibliotheek aanpassen" tabindex="0"><span class="resize-handle-bar"></span></div>
+    <div class="resize-handle" id="resize-handle-1" role="separator" aria-orientation="vertical" aria-label="Breedte van het eerste blok aanpassen" tabindex="0"><span class="resize-handle-bar"></span></div>
 
     <section class="panel panel-setlists" aria-label="Setlists" id="panel-setlists">
       <div class="panel-header">
@@ -319,9 +376,14 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       <div class="setlists-list" id="setlists-list"></div>
     </section>
 
-    <div class="resize-handle" id="resize-handle-setlists" role="separator" aria-orientation="vertical" aria-label="Breedte setlists aanpassen" tabindex="0"><span class="resize-handle-bar"></span></div>
+    <div class="resize-handle" id="resize-handle-2" role="separator" aria-orientation="vertical" aria-label="Breedte van het tweede blok aanpassen" tabindex="0"><span class="resize-handle-bar"></span></div>
 
-    <section class="panel panel-editor" aria-label="Actieve setlist" id="editor-panel"></section>
+    <section class="panel panel-editor" aria-label="Actieve setlist" id="panel-editor">
+      <div class="panel-header">
+        <h2>Actieve setlist</h2>
+      </div>
+      <div id="editor-panel"></div>
+    </section>
   </main>
 </div>
 
@@ -372,6 +434,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   var ICON_HANDLE = '<svg viewBox="0 0 8 20" fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="6" cy="3" r="1.4"/><circle cx="2" cy="10" r="1.4"/><circle cx="6" cy="10" r="1.4"/><circle cx="2" cy="17" r="1.4"/><circle cx="6" cy="17" r="1.4"/></svg>';
   var ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>';
   var ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  var ICON_LEFT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
+  var ICON_RIGHT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
   var ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>';
   var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
@@ -403,6 +467,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     measurementId: "G-PVSDB64C41"
   };
   var librarySearchTerm = "";
+  var libraryGenreFilter = "";
   var editingTrackId = null;
   var creatingSetlist = false;
   var renamingSetlistId = null;
@@ -411,6 +476,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   dropIndicator.className = "drop-indicator";
 
   var bannerEl = document.getElementById("banner");
+  var authGateEl = document.getElementById("auth-gate");
   var libraryListEl = document.getElementById("library-list");
   var setlistsListEl = document.getElementById("setlists-list");
   var editorPanelEl = document.getElementById("editor-panel");
@@ -482,6 +548,21 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   var storeMode = "memory"; // "claude" | "cloud" | "local" | "memory"
   var firebaseConfigSource = null; // "default" | "custom" | null
 
+  // ---------- optional login gate (self-hosted Firebase / GitHub Pages
+  // version only — the Claude-hosted version is already access-controlled
+  // by Claude's own sharing). Off by default (public); Jeroen turns it on
+  // per project once he's signed in himself. Real enforcement lives in the
+  // Firestore security rules, not in this client-side check — the rules
+  // must reference the same `meta/settings.requireLogin` flag this reads.
+  var fbApp = null;
+  var authInstance = null;
+  var authRequired = false;
+  var currentUser = null;
+  var remoteSubscribed = false;
+  var unsubTracks = null;
+  var unsubSetlists = null;
+  var unsubSettings = null;
+
   // Tri-state resolution of which Firebase project (if any) this device
   // should use: an explicit "disabled" marker wins (the visitor turned
   // cloud sync off here), then a per-device custom override, then the
@@ -537,9 +618,39 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       var statusMsg = firebaseConfigSource === "default"
         ? "Verbonden met cloud-synchronisatie (automatisch, via de ingebouwde configuratie van deze site). Iedereen die deze pagina opent, ziet en bewerkt dezelfde bibliotheek en setlists — zonder dat ze zelf iets hoeven in te stellen."
         : "Verbonden met cloud-synchronisatie via je eigen configuratie. Iedereen die deze pagina met dezelfde configuratie opent, ziet en bewerkt dezelfde bibliotheek en setlists.";
+      var authSectionHtml = '' +
+        '<div class="settings-divider"></div>' +
+        '<div class="login-status">' +
+          (currentUser
+            ? '<span>Ingelogd als <strong>' + escapeHtml(emailToUsername(currentUser.email)) + '</strong></span><button type="button" class="btn btn-ghost btn-small" id="auth-logout-btn">Uitloggen</button>'
+            : '<span>Niet ingelogd</span>') +
+        '</div>' +
+        (!currentUser ?
+          '<form id="settings-login-form" class="login-form">' +
+            '<input type="text" class="input" id="settings-login-username" placeholder="Gebruikersnaam" aria-label="Gebruikersnaam" autocomplete="username">' +
+            '<input type="password" class="input" id="settings-login-password" placeholder="Wachtwoord" aria-label="Wachtwoord" autocomplete="current-password">' +
+            '<button type="submit" class="btn btn-ghost btn-small">Inloggen</button>' +
+          '</form>' +
+          '<p class="field-error" id="settings-login-error" hidden></p>'
+        : '') +
+        '<label class="settings-toggle">' +
+          '<input type="checkbox" id="require-login-toggle"' + (authRequired ? ' checked' : '') + (currentUser ? '' : ' disabled') + '>' +
+          'Login vereisen voor iedereen' +
+        '</label>' +
+        (currentUser ? '' : '<p class="hint">Log in om deze instelling te kunnen wijzigen.</p>') +
+        '<details class="settings-help"><summary>Hoe voeg ik gebruikers toe?</summary>' +
+          '<ol>' +
+            '<li>Ga in de Firebase-console naar <strong>Authentication</strong> en zet de aanmeldmethode <strong>E-mail/wachtwoord</strong> aan.</li>' +
+            '<li>Klik op "Add user". Vul bij e-mail in: <code>gebruikersnaam@setlist-studio.local</code> (kleine letters, geen spaties) en kies zelf een wachtwoord.</li>' +
+            '<li>Geef de gebruikersnaam en het wachtwoord door aan die persoon — daarmee logt die hierboven in.</li>' +
+            '<li>Belangrijk: dit schakelt pas echt af als je ook de Firestore-beveiligingsregels aanpast — vraag hiervoor de exacte tekst.</li>' +
+          '</ol>' +
+        '</details>';
       panel.innerHTML = '' +
         '<div class="settings-body">' +
           '<p class="settings-status">' + statusMsg + '</p>' +
+          authSectionHtml +
+          '<div class="settings-divider"></div>' +
           '<button type="button" class="btn btn-ghost btn-small" id="disconnect-cloud-btn">Loskoppelen op dit apparaat</button>' +
           (firebaseConfigSource === "default" ? '' :
             '<details class="settings-help"><summary>Eigen configuratie wijzigen</summary>' +
@@ -617,11 +728,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   }
   var firebaseSdkLoadPromise = null;
   function loadFirebaseSdk(){
-    if (window.firebase && window.firebase.firestore) return Promise.resolve();
+    if (window.firebase && window.firebase.firestore && window.firebase.auth) return Promise.resolve();
     if (firebaseSdkLoadPromise) return firebaseSdkLoadPromise;
     var FB_VERSION = "10.13.2";
     firebaseSdkLoadPromise = loadScript("https://www.gstatic.com/firebasejs/" + FB_VERSION + "/firebase-app-compat.js")
       .then(function(){ return loadScript("https://www.gstatic.com/firebasejs/" + FB_VERSION + "/firebase-firestore-compat.js"); })
+      .then(function(){ return loadScript("https://www.gstatic.com/firebasejs/" + FB_VERSION + "/firebase-auth-compat.js"); })
       .catch(function(e){ firebaseSdkLoadPromise = null; throw e; });
     return firebaseSdkLoadPromise;
   }
@@ -631,22 +743,100 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     var app;
     try{ app = window.firebase.initializeApp(config); }
     catch(e){ app = window.firebase.initializeApp(config, "setlist-studio-" + Date.now()); }
-    return window.firebase.firestore(app);
+    return {db: window.firebase.firestore(app), app: app};
+  }
+
+  // Firebase's email/password sign-in needs an email-shaped identifier, so
+  // a plain username is mapped onto a fixed fake domain. Jeroen must use
+  // this exact same convention when adding a user in the Firebase console
+  // (Authentication → Users → Add user): email field = <username>@setlist-studio.local.
+  function usernameToEmail(username){
+    var clean = String(username || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    return clean + "@setlist-studio.local";
+  }
+  function emailToUsername(email){
+    return String(email || "").split("@")[0];
   }
 
   function subscribeRemote(){
-    db.collection("tracks").onSnapshot(function(snap){
+    unsubTracks = db.collection("tracks").onSnapshot(function(snap){
       tracksMap.clear();
       snap.docs.forEach(function(d){ tracksMap.set(d.id, Object.assign({id:d.id}, d.data())); });
       renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
     }, function(){ showBanner("De bibliotheek kon niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
 
-    db.collection("setlists").onSnapshot(function(snap){
+    unsubSetlists = db.collection("setlists").onSnapshot(function(snap){
       setlistsMap.clear();
       snap.docs.forEach(function(d){ setlistsMap.set(d.id, Object.assign({id:d.id}, d.data())); });
       if (activeSetlistId && !setlistsMap.has(activeSetlistId)) activeSetlistId = null;
       renderSetlistsList(); renderActiveSetlist(); renderStats();
     }, function(){ showBanner("De setlists konden niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
+  }
+
+  // ---------- login gate: settings doc + auth state, kept in sync live so
+  // toggling "Login vereisen" (or signing in/out) takes effect immediately
+  // for everyone, without a page reload.
+  function initAuthAndSettings(app){
+    authInstance = window.firebase.auth(app);
+    return new Promise(function(resolve){
+      var settled = false;
+      function settle(){ if (!settled){ settled = true; resolve(); } }
+      authInstance.onAuthStateChanged(function(user){
+        currentUser = user;
+        handleAuthOrAccessChange();
+      });
+      unsubSettings = db.collection("meta").doc("settings").onSnapshot(function(doc){
+        authRequired = !!(doc.exists && doc.data() && doc.data().requireLogin);
+        handleAuthOrAccessChange();
+        settle();
+      }, function(){ settle(); });
+      // Don't block the initial render forever if the settings read stalls.
+      setTimeout(settle, 4000);
+    });
+  }
+
+  function handleAuthOrAccessChange(){
+    renderAuthGate();
+    renderSettingsPanel();
+    var hasAccess = !authRequired || !!currentUser;
+    if (hasAccess && !remoteSubscribed){
+      remoteSubscribed = true;
+      subscribeRemote();
+      maybeMigratePendingData();
+    } else if (!hasAccess && remoteSubscribed){
+      remoteSubscribed = false;
+      if (unsubTracks){ unsubTracks(); unsubTracks = null; }
+      if (unsubSetlists){ unsubSetlists(); unsubSetlists = null; }
+      tracksMap.clear(); setlistsMap.clear(); activeSetlistId = null;
+      renderLibrary(); renderSetlistsList(); renderActiveSetlist(); renderStats();
+    }
+  }
+
+  function renderAuthGate(){
+    if (!authGateEl) return;
+    authGateEl.hidden = !(storeMode === "cloud" && authRequired && !currentUser);
+  }
+
+  function handleAuthLogin(username, password, errorEl){
+    if (errorEl) errorEl.hidden = true;
+    if (!username || !password){
+      if (errorEl){ errorEl.textContent = "Vul gebruikersnaam en wachtwoord in."; errorEl.hidden = false; }
+      return;
+    }
+    authInstance.signInWithEmailAndPassword(usernameToEmail(username), password).catch(function(e){
+      var msg = "Inloggen mislukt. Controleer gebruikersnaam en wachtwoord.";
+      if (errorEl){ errorEl.textContent = msg; errorEl.hidden = false; }
+      else showBanner(msg, "warn");
+    });
+  }
+  function handleAuthLogout(){
+    if (authInstance) authInstance.signOut();
+  }
+  function handleToggleRequireLogin(checked){
+    if (!currentUser){ showBanner("Log eerst in om deze instelling te wijzigen.", "warn"); return; }
+    db.collection("meta").doc("settings").set({requireLogin: checked}, {merge:true}).catch(function(e){
+      showBanner("Kon instelling niet opslaan: " + (e && e.message ? e.message : "onbekende fout") + ".", "warn");
+    });
   }
 
   // One-time handoff: local data present before connecting cloud sync is
@@ -697,10 +887,11 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     var fbConfig = resolveFirebaseConfig();
     if (fbConfig){
       try{
-        db = await initFirebase(fbConfig);
+        var fbResult = await initFirebase(fbConfig);
+        db = fbResult.db; fbApp = fbResult.app;
         usingDb = true; storeMode = "cloud";
-        subscribeRemote();
-        maybeMigratePendingData();
+        renderSettingsPanel();
+        await initAuthAndSettings(fbApp);
         renderSettingsPanel();
         return;
       } catch(e){
@@ -723,8 +914,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     renderSettingsPanel();
   }
 
-  async function addTrack(title, artist, durationSec){
-    var data = {title: title, artist: artist || "", durationSec: durationSec, addedAt: Date.now()};
+  async function addTrack(title, artist, durationSec, genre){
+    var data = {title: title, artist: artist || "", genre: genre || "", durationSec: durationSec, addedAt: Date.now()};
     if (usingDb){
       await db.collection("tracks").add(data);
     } else {
@@ -735,13 +926,13 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     }
   }
 
-  async function updateTrack(id, title, artist, durationSec){
+  async function updateTrack(id, title, artist, durationSec, genre){
     if (usingDb){
-      await db.collection("tracks").doc(id).update({title: title, artist: artist || "", durationSec: durationSec});
+      await db.collection("tracks").doc(id).update({title: title, artist: artist || "", genre: genre || "", durationSec: durationSec});
     } else {
       var t = tracksMap.get(id);
       if (t){
-        t.title = title; t.artist = artist || ""; t.durationSec = durationSec;
+        t.title = title; t.artist = artist || ""; t.genre = genre || ""; t.durationSec = durationSec;
         persistLocal();
         renderLibrary(); renderActiveSetlist(); renderSetlistsList();
       }
@@ -832,12 +1023,36 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     });
   }
 
+  function distinctGenres(){
+    var set = new Set();
+    tracksMap.forEach(function(t){ if (t.genre) set.add(t.genre); });
+    return Array.from(set).sort(function(a,b){ return a.localeCompare(b, "nl", {sensitivity:"base"}); });
+  }
+
+  function updateGenreControls(){
+    var genres = distinctGenres();
+    if (libraryGenreFilter && genres.indexOf(libraryGenreFilter) === -1) libraryGenreFilter = "";
+    var filterEl = document.getElementById("library-genre-filter");
+    if (filterEl){
+      filterEl.innerHTML = '<option value="">Alle genres</option>' +
+        genres.map(function(g){ return '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>'; }).join("");
+      filterEl.value = libraryGenreFilter;
+    }
+    var datalistEl = document.getElementById("genre-datalist");
+    if (datalistEl){
+      datalistEl.innerHTML = genres.map(function(g){ return '<option value="' + escapeHtml(g) + '"></option>'; }).join("");
+    }
+  }
+
   function renderLibrary(){
     if (editingTrackId && !tracksMap.has(editingTrackId)) editingTrackId = null;
+    updateGenreControls();
 
     var term = librarySearchTerm.trim().toLowerCase();
     var list = sortedTracks().filter(function(t){
-      return !term || t.title.toLowerCase().indexOf(term) !== -1 || (t.artist||"").toLowerCase().indexOf(term) !== -1;
+      var matchesTerm = !term || t.title.toLowerCase().indexOf(term) !== -1 || (t.artist||"").toLowerCase().indexOf(term) !== -1;
+      var matchesGenre = !libraryGenreFilter || (t.genre || "") === libraryGenreFilter;
+      return matchesTerm && matchesGenre;
     });
 
     if (tracksMap.size === 0){
@@ -845,7 +1060,8 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       return;
     }
     if (list.length === 0){
-      libraryListEl.innerHTML = '<div class="empty-state">Geen nummers gevonden voor “' + escapeHtml(librarySearchTerm) + '”.</div>';
+      var reason = term ? '“' + escapeHtml(librarySearchTerm) + '”' : (libraryGenreFilter ? 'genre “' + escapeHtml(libraryGenreFilter) + '”' : '');
+      libraryListEl.innerHTML = '<div class="empty-state">Geen nummers gevonden' + (reason ? ' voor ' + reason : '') + '.</div>';
       return;
     }
     libraryListEl.innerHTML = list.map(function(t){
@@ -855,6 +1071,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
             '<span class="drag-handle" aria-hidden="true" style="visibility:hidden">' + ICON_HANDLE + '</span>' +
             '<input type="text" class="input track-edit-title" id="edit-title-' + t.id + '" value="' + escapeHtml(t.title) + '" aria-label="Titel bewerken" placeholder="Titel">' +
             '<input type="text" class="input track-edit-artist" id="edit-artist-' + t.id + '" value="' + escapeHtml(t.artist || "") + '" aria-label="Artiest bewerken" placeholder="Artiest">' +
+            '<input type="text" class="input track-edit-genre" id="edit-genre-' + t.id + '" value="' + escapeHtml(t.genre || "") + '" aria-label="Genre bewerken" placeholder="Genre" list="genre-datalist">' +
             '<input type="text" class="input input-duration mono track-edit-duration" id="edit-duration-' + t.id + '" value="' + formatDuration(t.durationSec) + '" aria-label="Duur bewerken (mm:ss)">' +
             '<button type="button" class="icon-btn" data-action="save-track-edit" data-id="' + t.id + '" aria-label="Wijzigingen opslaan" title="Opslaan">' + ICON_CHECK + '</button>' +
             '<button type="button" class="icon-btn" data-action="cancel-track-edit" data-id="' + t.id + '" aria-label="Bewerken annuleren" title="Annuleren">' + ICON_X + '</button>' +
@@ -868,6 +1085,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
           '<span class="track-info">' +
             '<span class="track-title">' + escapeHtml(t.title) + '</span>' +
             (t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
+            (t.genre ? '<span class="track-genre">' + escapeHtml(t.genre) + '</span>' : '') +
           '</span>' +
           '<span class="track-duration mono">' + formatDuration(t.durationSec) + '</span>' +
           '<button type="button" class="icon-btn" data-action="edit-track" data-id="' + t.id + '" aria-label="Nummer bewerken" title="Bewerken">' + ICON_PENCIL + '</button>' +
@@ -955,6 +1173,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
           '<span class="track-info">' +
             '<span class="track-title">' + (missing ? '(verwijderd nummer)' : escapeHtml(t.title)) + '</span>' +
             (!missing && t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
+            (!missing && t.genre ? '<span class="track-genre">' + escapeHtml(t.genre) + '</span>' : '') +
           '</span>' +
           '<span class="track-duration mono">' + formatDuration(missing ? 0 : t.durationSec) + '</span>' +
           '<span class="track-reorder">' +
@@ -979,6 +1198,7 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       var addTrackOptions = sortedTracks().map(function(t){
         return '<option value="' + t.id + '">' + escapeHtml(t.title) +
           (t.artist ? ' — ' + escapeHtml(t.artist) : '') +
+          (t.genre ? ' [' + escapeHtml(t.genre) + ']' : '') +
           ' (' + formatDuration(t.durationSec) + ')</option>';
       }).join("");
       addTrackRow = '' +
@@ -1051,13 +1271,14 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       var mmss = (fields[1]||"").trim().replace(/^["']|["']$/g, "");
       var secField = (fields[2]||"").trim().replace(/^["']|["']$/g, "");
       var artist = (fields[3]||"").trim().replace(/^["']|["']$/g, "");
+      var genre = (fields[4]||"").trim().replace(/^["']|["']$/g, "");
       if (idx === 0 && /^titel$|^title$/i.test(title)) return; // header row, ignore silently
       var durationSec = null;
       if (secField && /^\d+$/.test(secField)) durationSec = parseInt(secField, 10);
       else if (mmss) durationSec = parseDuration(mmss);
       if (!title || durationSec == null || durationSec <= 0){ skipped++; return; }
       added++;
-      rows.push({title:title, artist:artist, durationSec:durationSec});
+      rows.push({title:title, artist:artist, genre:genre, durationSec:durationSec});
     });
     return {rows: rows, added: added, skipped: skipped};
   }
@@ -1066,12 +1287,12 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     var text = await file.text();
     var result = importCsvText(text);
     if (result.rows.length === 0){
-      showBanner("Geen geldige regels gevonden. Verwachte kolommen: titel, duur(mm:ss), duur(sec) — gescheiden door komma of puntkomma.", "warn");
+      showBanner("Geen geldige regels gevonden. Verwachte kolommen: titel, duur(mm:ss), duur(sec), artiest, genre — gescheiden door komma of puntkomma.", "warn");
       return;
     }
     showBanner("Bezig met importeren…");
     for (var i=0;i<result.rows.length;i++){
-      await addTrack(result.rows[i].title, result.rows[i].artist, result.rows[i].durationSec);
+      await addTrack(result.rows[i].title, result.rows[i].artist, result.rows[i].durationSec, result.rows[i].genre);
     }
     var msg = result.added + " " + plural(result.added,"nummer","nummers") + " toegevoegd";
     if (result.skipped > 0) msg += ", " + result.skipped + " " + plural(result.skipped,"regel","regels") + " overgeslagen (onherkenbaar formaat)";
@@ -1458,23 +1679,25 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
   function commitTrackEdit(id){
     var titleInput = document.getElementById("edit-title-" + id);
     var artistInput = document.getElementById("edit-artist-" + id);
+    var genreInput = document.getElementById("edit-genre-" + id);
     var durInput = document.getElementById("edit-duration-" + id);
     if (!titleInput || !durInput) return;
     var title = titleInput.value.trim();
     var artist = artistInput ? artistInput.value.trim() : "";
+    var genre = genreInput ? genreInput.value.trim() : "";
     var dur = parseDuration(durInput.value);
     if (!title){ showBanner("Vul een titel in.", "warn"); titleInput.focus(); return; }
     if (dur == null){ showBanner("Gebruik het formaat mm:ss, bijvoorbeeld 3:45.", "warn"); durInput.focus(); return; }
     editingTrackId = null;
-    updateTrack(id, title, artist, dur);
+    updateTrack(id, title, artist, dur, genre);
     renderLibrary();
   }
   libraryPanel.addEventListener("keydown", function(e){
-    var isEditField = e.target.classList && (e.target.classList.contains("track-edit-title") || e.target.classList.contains("track-edit-artist") || e.target.classList.contains("track-edit-duration"));
+    var isEditField = e.target.classList && (e.target.classList.contains("track-edit-title") || e.target.classList.contains("track-edit-artist") || e.target.classList.contains("track-edit-genre") || e.target.classList.contains("track-edit-duration"));
     if (!isEditField) return;
     if (e.key === "Enter"){
       e.preventDefault();
-      var id = e.target.id.replace(/^edit-(title|artist|duration)-/, "");
+      var id = e.target.id.replace(/^edit-(title|artist|genre|duration)-/, "");
       commitTrackEdit(id);
     } else if (e.key === "Escape"){
       editingTrackId = null;
@@ -1487,21 +1710,29 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       renderLibrary();
     }
   });
+  libraryPanel.addEventListener("change", function(e){
+    if (e.target.id === "library-genre-filter"){
+      libraryGenreFilter = e.target.value;
+      renderLibrary();
+    }
+  });
   libraryPanel.addEventListener("submit", function(e){
     if (e.target.id === "add-track-form"){
       e.preventDefault();
       var titleInput = document.getElementById("new-track-title");
       var artistInput = document.getElementById("new-track-artist");
+      var genreInput = document.getElementById("new-track-genre");
       var durInput = document.getElementById("new-track-duration");
       var errorEl = document.getElementById("add-track-error");
       var title = titleInput.value.trim();
       var artist = artistInput.value.trim();
+      var genre = genreInput.value.trim();
       var dur = parseDuration(durInput.value);
       if (!title){ errorEl.textContent = "Vul een titel in."; errorEl.hidden = false; return; }
       if (dur == null){ errorEl.textContent = "Gebruik het formaat mm:ss, bijvoorbeeld 3:45."; errorEl.hidden = false; return; }
       errorEl.hidden = true;
-      addTrack(title, artist, dur);
-      titleInput.value = ""; artistInput.value = ""; durInput.value = "";
+      addTrack(title, artist, dur, genre);
+      titleInput.value = ""; artistInput.value = ""; genreInput.value = ""; durInput.value = "";
       titleInput.focus();
     }
   });
@@ -1662,79 +1893,170 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
     }
   });
 
-  // ---------- resizable panels ----------
+  // ---------- resizable & reorderable panels ----------
   // Columns are sized in `fr` units (proportional shares of the available
   // width), so they automatically rescale together whenever the window is
   // resized — no resize listener needed, the grid does it natively.
   // While actively dragging a handle we track the mouse 1:1 in pixels for a
-  // direct feel, then convert the result back to a ratio (relative to the
-  // editor panel's width, i.e. "1fr") when the drag ends, so the next
-  // window resize keeps that same proportion.
+  // direct feel, then convert the result back to a ratio when the drag
+  // ends, so the next window resize keeps that same proportion.
+  //
+  // Which panel's content lands in which grid slot is independent of
+  // width: `panelOrder` holds the current left-to-right arrangement of the
+  // three panel ids, applied via the CSS `order` property, so any panel
+  // can be moved into any of the three positions (e.g. the active setlist
+  // entirely on the left, or in the middle). Each panel remembers its own
+  // width preference; only the first two slots are directly resizable via
+  // a drag handle — the third/rightmost slot always takes the remaining
+  // space, whichever panel currently occupies it.
   var PANEL_WIDTHS_KEY = "setlist-studio:panel-widths";
+  var PANEL_ORDER_KEY = "setlist-studio:panel-order";
+  var DEFAULT_PANEL_ORDER = ["library", "setlists", "editor"];
+  var DEFAULT_PANEL_FR = {library: 1.75, setlists: 1.55, editor: 1.75};
+  var PANEL_LABELS = {library: "Bibliotheek", setlists: "Setlists", editor: "Actieve setlist"};
+  var PANEL_SECTION_IDS = {library: "panel-library", setlists: "panel-setlists", editor: "panel-editor"};
   var RESIZE_MIN_PX = 240;
   var RESIZE_MAX_PX = 1400;
   var RESIZE_MIN_FR = 0.3;
   var RESIZE_MAX_FR = 3.2;
   var STACK_BREAKPOINT = 980;
 
+  var panelOrder = DEFAULT_PANEL_ORDER.slice();
+  var panelWidths = Object.assign({}, DEFAULT_PANEL_FR);
+
   function clampFr(v){ return Math.max(RESIZE_MIN_FR, Math.min(RESIZE_MAX_FR, v)); }
   function panelPx(el){ return el ? el.getBoundingClientRect().width : 0; }
+  function panelSectionEl(id){ return document.getElementById(PANEL_SECTION_IDS[id]); }
 
-  function savePanelWidths(fr){
-    try{ window.localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(fr)); } catch(e){ /* ignore */ }
+  function savePanelWidths(){
+    try{ window.localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(panelWidths)); } catch(e){ /* ignore */ }
   }
   function loadPanelWidths(){
     try{
       var raw = window.localStorage.getItem(PANEL_WIDTHS_KEY);
-      if (!raw) return null;
+      if (!raw) return;
       var obj = JSON.parse(raw);
-      if (obj && typeof obj.library === "number" && typeof obj.setlists === "number") return obj;
+      if (!obj) return;
+      DEFAULT_PANEL_ORDER.forEach(function(id){
+        if (typeof obj[id] === "number") panelWidths[id] = clampFr(obj[id]);
+      });
     } catch(e){ /* ignore */ }
-    return null;
+  }
+  function savePanelOrder(){
+    try{ window.localStorage.setItem(PANEL_ORDER_KEY, JSON.stringify(panelOrder)); } catch(e){ /* ignore */ }
+  }
+  function loadPanelOrder(){
+    try{
+      var raw = window.localStorage.getItem(PANEL_ORDER_KEY);
+      if (!raw) return;
+      var obj = JSON.parse(raw);
+      if (Array.isArray(obj) && obj.length === 3 &&
+          DEFAULT_PANEL_ORDER.slice().sort().join(",") === obj.slice().sort().join(",")){
+        panelOrder = obj;
+      }
+    } catch(e){ /* ignore */ }
+  }
+
+  function reorderButtonsHtml(panelId){
+    return '' +
+      '<span class="panel-reorder">' +
+        '<button type="button" class="icon-btn" data-action="panel-move-left" data-panel="' + panelId + '" aria-label="' + PANEL_LABELS[panelId] + '-blok naar links verplaatsen" title="Naar links verplaatsen">' + ICON_LEFT + '</button>' +
+        '<button type="button" class="icon-btn" data-action="panel-move-right" data-panel="' + panelId + '" aria-label="' + PANEL_LABELS[panelId] + '-blok naar rechts verplaatsen" title="Naar rechts verplaatsen">' + ICON_RIGHT + '</button>' +
+      '</span>';
+  }
+
+  function updateReorderButtons(){
+    DEFAULT_PANEL_ORDER.forEach(function(id){
+      var section = panelSectionEl(id);
+      if (!section) return;
+      var idx = panelOrder.indexOf(id);
+      var leftBtn = section.querySelector('[data-action="panel-move-left"]');
+      var rightBtn = section.querySelector('[data-action="panel-move-right"]');
+      if (leftBtn) leftBtn.disabled = (idx === 0);
+      if (rightBtn) rightBtn.disabled = (idx === panelOrder.length - 1);
+    });
+  }
+
+  function applyPanelLayout(){
+    var layoutEl = document.querySelector(".layout");
+    panelOrder.forEach(function(id, i){
+      var section = panelSectionEl(id);
+      if (section) section.style.order = i * 2;
+    });
+    var handle1 = document.getElementById("resize-handle-1");
+    var handle2 = document.getElementById("resize-handle-2");
+    if (handle1) handle1.style.order = 1;
+    if (handle2) handle2.style.order = 3;
+    layoutEl.style.setProperty("--w-col1", clampFr(panelWidths[panelOrder[0]]).toFixed(3) + "fr");
+    layoutEl.style.setProperty("--w-col2", clampFr(panelWidths[panelOrder[1]]).toFixed(3) + "fr");
+    updateReorderButtons();
+  }
+
+  function movePanel(panelId, dir){
+    var idx = panelOrder.indexOf(panelId);
+    var newIdx = idx + dir;
+    if (idx === -1 || newIdx < 0 || newIdx >= panelOrder.length) return;
+    var copy = panelOrder.slice();
+    var tmp = copy[idx]; copy[idx] = copy[newIdx]; copy[newIdx] = tmp;
+    panelOrder = copy;
+    savePanelOrder();
+    applyPanelLayout();
+  }
+
+  function initPanelReorder(){
+    DEFAULT_PANEL_ORDER.forEach(function(id){
+      var section = panelSectionEl(id);
+      var header = section ? section.querySelector(".panel-header") : null;
+      if (header && !header.querySelector(".panel-reorder")){
+        header.insertAdjacentHTML("beforeend", reorderButtonsHtml(id));
+      }
+    });
+    var layoutEl = document.querySelector(".layout");
+    layoutEl.addEventListener("click", function(e){
+      var btn = e.target.closest && e.target.closest('[data-action="panel-move-left"], [data-action="panel-move-right"]');
+      if (!btn || btn.disabled) return;
+      var dir = btn.getAttribute("data-action") === "panel-move-left" ? -1 : 1;
+      movePanel(btn.getAttribute("data-panel"), dir);
+    });
   }
 
   function initResizers(){
     var layoutEl = document.querySelector(".layout");
-    var libraryEl = document.querySelector(".panel-library");
-    var setlistsEl = document.querySelector(".panel-setlists");
-    var editorEl = document.getElementById("editor-panel");
 
-    var stored = loadPanelWidths();
-    if (stored){
-      layoutEl.style.setProperty("--w-library", clampFr(stored.library).toFixed(3) + "fr");
-      layoutEl.style.setProperty("--w-setlists", clampFr(stored.setlists).toFixed(3) + "fr");
-    }
+    function slotEl(slotIndex){ return panelSectionEl(panelOrder[slotIndex]); }
 
     function applyRatiosFromCurrentSizes(){
-      var libPx = panelPx(libraryEl), setPx = panelPx(setlistsEl), edPx = panelPx(editorEl);
+      var edPx = panelPx(slotEl(2));
       if (edPx <= 0) return;
-      var libFr = clampFr(libPx / edPx);
-      var setFr = clampFr(setPx / edPx);
-      layoutEl.style.setProperty("--w-library", libFr.toFixed(3) + "fr");
-      layoutEl.style.setProperty("--w-setlists", setFr.toFixed(3) + "fr");
-      savePanelWidths({library: libFr, setlists: setFr});
+      var fr1 = clampFr(panelPx(slotEl(0)) / edPx);
+      var fr2 = clampFr(panelPx(slotEl(1)) / edPx);
+      panelWidths[panelOrder[0]] = fr1;
+      panelWidths[panelOrder[1]] = fr2;
+      layoutEl.style.setProperty("--w-col1", fr1.toFixed(3) + "fr");
+      layoutEl.style.setProperty("--w-col2", fr2.toFixed(3) + "fr");
+      savePanelWidths();
     }
 
-    function dynamicMaxPx(targetEl, otherEl){
-      var reserve = panelPx(otherEl) + 14 + 14 + 320 + 32; // other column + handles + min editor + gutters
+    function dynamicMaxPx(){
+      var reserve = panelPx(slotEl(2)) + 14 + 14 + 320 + 32; // remainder column + handles + min width + gutters
       var avail = window.innerWidth - reserve;
       return Math.max(RESIZE_MIN_PX, Math.min(RESIZE_MAX_PX, avail));
     }
 
-    function setupResizeHandle(handle, targetEl, otherEl){
+    function setupResizeHandle(handle, slotIndex, colVar){
       if (!handle) return;
       var dragging = false, startX = 0, startWidth = 0;
       handle.addEventListener("pointerdown", function(e){
         if (window.innerWidth < STACK_BREAKPOINT) return;
-        dragging = true; startX = e.clientX; startWidth = panelPx(targetEl);
+        dragging = true; startX = e.clientX; startWidth = panelPx(slotEl(slotIndex));
         try{ handle.setPointerCapture(e.pointerId); } catch(err){}
         document.body.style.userSelect = "none";
       });
       handle.addEventListener("pointermove", function(e){
         if (!dragging) return;
-        var max = dynamicMaxPx(targetEl, otherEl);
+        var max = dynamicMaxPx();
         var next = Math.max(RESIZE_MIN_PX, Math.min(max, startWidth + (e.clientX - startX)));
-        layoutEl.style.setProperty(targetEl === libraryEl ? "--w-library" : "--w-setlists", next + "px");
+        layoutEl.style.setProperty(colVar, next + "px");
       });
       function endDrag(){
         if (!dragging) return;
@@ -1748,15 +2070,23 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
         e.preventDefault();
         var step = 24;
-        var max = dynamicMaxPx(targetEl, otherEl);
-        var next = Math.max(RESIZE_MIN_PX, Math.min(max, panelPx(targetEl) + (e.key === "ArrowRight" ? step : -step)));
-        layoutEl.style.setProperty(targetEl === libraryEl ? "--w-library" : "--w-setlists", next + "px");
+        var max = dynamicMaxPx();
+        var next = Math.max(RESIZE_MIN_PX, Math.min(max, panelPx(slotEl(slotIndex)) + (e.key === "ArrowRight" ? step : -step)));
+        layoutEl.style.setProperty(colVar, next + "px");
         applyRatiosFromCurrentSizes();
       });
     }
 
-    setupResizeHandle(document.getElementById("resize-handle-library"), libraryEl, editorEl);
-    setupResizeHandle(document.getElementById("resize-handle-setlists"), setlistsEl, editorEl);
+    setupResizeHandle(document.getElementById("resize-handle-1"), 0, "--w-col1");
+    setupResizeHandle(document.getElementById("resize-handle-2"), 1, "--w-col2");
+  }
+
+  function initPanelLayout(){
+    loadPanelOrder();
+    loadPanelWidths();
+    initPanelReorder();
+    applyPanelLayout();
+    initResizers();
   }
 
   // ---------- settings panel (cloud sync) ----------
@@ -1771,11 +2101,39 @@ html,body{margin:0;} img{max-width:100%;} [hidden]{display:none!important;}
       if (e.target.id === "connect-cloud-btn"){ handleConnectFirebase(); return; }
       if (e.target.id === "disconnect-cloud-btn"){ handleDisconnectFirebase(); return; }
       if (e.target.id === "reenable-cloud-btn"){ handleReenableFirebase(); return; }
+      if (e.target.id === "auth-logout-btn"){ handleAuthLogout(); return; }
+    });
+    settingsPanelEl.addEventListener("submit", function(e){
+      if (e.target.id === "settings-login-form"){
+        e.preventDefault();
+        var u = document.getElementById("settings-login-username");
+        var p = document.getElementById("settings-login-password");
+        var errorEl = document.getElementById("settings-login-error");
+        handleAuthLogin(u ? u.value.trim() : "", p ? p.value : "", errorEl);
+      }
+    });
+    settingsPanelEl.addEventListener("change", function(e){
+      if (e.target.id === "require-login-toggle"){
+        handleToggleRequireLogin(e.target.checked);
+      }
+    });
+  }
+
+  // ---------- auth gate (full-page login when required and not signed in) ----------
+  if (authGateEl){
+    authGateEl.addEventListener("submit", function(e){
+      if (e.target.id === "auth-gate-form"){
+        e.preventDefault();
+        var u = document.getElementById("auth-gate-username");
+        var p = document.getElementById("auth-gate-password");
+        var errorEl = document.getElementById("auth-gate-error");
+        handleAuthLogin(u ? u.value.trim() : "", p ? p.value : "", errorEl);
+      }
     });
   }
 
   // ---------- boot ----------
-  initResizers();
+  initPanelLayout();
   initStore();
 })();
 </script>
