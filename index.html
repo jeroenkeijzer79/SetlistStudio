@@ -59,9 +59,11 @@ img{max-width:100%;}
   .app{display:flex; flex-direction:column; gap:18px; width:100%;}
 
   .app-version{
-    position:fixed; left:50%; bottom:6px; transform:translateX(-50%); z-index:1000;
+    position:fixed; left:50%; bottom:11px; transform:translateX(-50%); z-index:1000;
     font-size:10px; line-height:1; color:var(--text-muted);
     opacity:.65; pointer-events:none; user-select:none;
+    padding:4px 8px; border:1px solid var(--border); border-radius:6px;
+    background:var(--surface);
   }
 
   .topbar{
@@ -257,7 +259,11 @@ img{max-width:100%;}
 
   .panel-header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}
   .setlists-filters{display:flex; align-items:center; gap:6px;}
-  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}
+  .setlist-filter-toggle{
+    display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem;
+    white-space:nowrap; cursor:pointer; padding:5px 8px; border:1px solid var(--border);
+    border-radius:8px; background:var(--surface-2);
+  }
   .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
   #new-setlist-btn{flex:none; padding:8px 10px; margin-left:auto;}
   #new-setlist-btn svg{width:16px; height:16px;}
@@ -284,6 +290,7 @@ img{max-width:100%;}
   .library-list, .setlists-list{
     display:flex; flex-direction:column; gap:6px; overflow-y:auto; padding-right:2px;
   }
+  .panel-setlists .setlists-list{ margin-top:-1px; }
 
   .track-item{
     display:flex; align-items:center; gap:8px; padding:8px 8px 8px 4px;
@@ -403,7 +410,10 @@ img{max-width:100%;}
   .setlist-track-item:active{cursor:grabbing;}
   .setlist-track-item.dragging{opacity:.4;}
   .setlist-track-item.missing{border-style:dashed; color:var(--text-muted);}
-  .track-position{width:22px; text-align:right; color:var(--text); font-size:1.05rem; font-weight:700; flex:none;}
+  .track-position{
+    width:30px; margin-left:-3px; text-align:right; color:var(--text);
+    font-size:2rem; line-height:1.05; font-weight:700; flex:none;
+  }
   .drop-indicator{height:3px; border-radius:2px; background:var(--accent); margin:0 4px;}
   .drop-hint{text-align:center; color:var(--text-muted); font-size:.85rem; padding:14px 6px;}
 
