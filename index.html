@@ -409,7 +409,7 @@ img{max-width:100%;}
 </style>
 </head>
 <body>
-<div class="app-version" aria-label="Versie">v1.1</div>
+<div class="app-version" aria-label="Versie">v1.4</div>
 
 
 
@@ -526,9 +526,8 @@ img{max-width:100%;}
       <div class="panel-header">
         <h2>Setlists</h2>
         <span class="panel-header-actions">
-          <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
+          <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn" aria-label="Nieuwe setlist" title="Nieuwe setlist">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-            
           </button>
         </span>
       </div>
@@ -1659,15 +1658,11 @@ img{max-width:100%;}
     editorPanelEl.innerHTML = '' +
       '<div class="editor-header">' +
         '<div class="editor-title-row">' +
-          (tracksMap.size === 0 ? '' :
-            '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
-        '</div>' +
-        '<div class="editor-stats">' +
           '<input type="date" id="setlist-date-input" value="' + escapeHtml(sl.date || "") + '" aria-label="Datum van de setlist">' +
           '<span class="badge badge-duration">' + formatDuration(total) + '</span>' +
-          '<span class="editor-actions">' +
-            '<button type="button" class="btn btn-small" data-action="export-setlist"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Download</button>' +
-          '</span>' +
+          '<button type="button" class="btn btn-small" data-action="export-setlist"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Download</button>' +
+          (tracksMap.size === 0 ? '' :
+            '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
         '</div>' +
       '</div>' +
       '<div id="setlist-track-list">' + itemsHtml + '</div>';
@@ -2950,6 +2945,7 @@ img{max-width:100%;}
   // a drag handle — the third/rightmost slot always takes the remaining
   // space, whichever panel currently occupies it.
   var PANEL_WIDTHS_KEY = "setlist-studio:panel-widths";
+  var PANEL_WIDTHS_PX_KEY = "setlist-studio:panel-widths-px";
   var PANEL_ORDER_KEY = "setlist-studio:panel-order";
   var DEFAULT_PANEL_ORDER = ["library", "setlists", "editor"];
   var DEFAULT_PANEL_FR = {library: 1.75, setlists: 1.55, editor: 1.75};
@@ -2957,29 +2953,36 @@ img{max-width:100%;}
   var PANEL_SECTION_IDS = {library: "panel-library", setlists: "panel-setlists", editor: "panel-editor"};
   var RESIZE_MIN_PX = 240;
   var RESIZE_MAX_PX = 1400;
-  var RESIZE_MIN_FR = 0.3;
-  var RESIZE_MAX_FR = 3.2;
   var STACK_BREAKPOINT = 980;
 
   var panelOrder = DEFAULT_PANEL_ORDER.slice();
   var panelWidths = Object.assign({}, DEFAULT_PANEL_FR);
+  var panelWidthsPx = {};
 
-  function clampFr(v){ return Math.max(RESIZE_MIN_FR, Math.min(RESIZE_MAX_FR, v)); }
+  function clampPx(v){ return Math.max(RESIZE_MIN_PX, Math.min(RESIZE_MAX_PX, v)); }
   function panelPx(el){ return el ? el.getBoundingClientRect().width : 0; }
   function panelSectionEl(id){ return document.getElementById(PANEL_SECTION_IDS[id]); }
 
   function savePanelWidths(){
     try{ window.localStorage.setItem(PANEL_WIDTHS_KEY, JSON.stringify(panelWidths)); } catch(e){ /* ignore */ }
+    try{ window.localStorage.setItem(PANEL_WIDTHS_PX_KEY, JSON.stringify(panelWidthsPx)); } catch(e){ /* ignore */ }
   }
   function loadPanelWidths(){
     try{
+      var rawPx = window.localStorage.getItem(PANEL_WIDTHS_PX_KEY);
+      if (rawPx){
+        var pxObj = JSON.parse(rawPx);
+        if (pxObj) DEFAULT_PANEL_ORDER.forEach(function(id){
+          if (typeof pxObj[id] === "number") panelWidthsPx[id] = clampPx(pxObj[id]);
+        });
+      }
       var raw = window.localStorage.getItem(PANEL_WIDTHS_KEY);
-      if (!raw) return;
-      var obj = JSON.parse(raw);
-      if (!obj) return;
-      DEFAULT_PANEL_ORDER.forEach(function(id){
-        if (typeof obj[id] === "number") panelWidths[id] = clampFr(obj[id]);
-      });
+      if (raw){
+        var obj = JSON.parse(raw);
+        if (obj) DEFAULT_PANEL_ORDER.forEach(function(id){
+          if (typeof obj[id] === "number") panelWidths[id] = obj[id];
+        });
+      }
     } catch(e){ /* ignore */ }
   }
   function savePanelOrder(){
@@ -2991,9 +2994,7 @@ img{max-width:100%;}
       if (!raw) return;
       var obj = JSON.parse(raw);
       if (Array.isArray(obj) && obj.length === 3 &&
-          DEFAULT_PANEL_ORDER.slice().sort().join(",") === obj.slice().sort().join(",")){
-        panelOrder = obj;
-      }
+          DEFAULT_PANEL_ORDER.slice().sort().join(",") === obj.slice().sort().join(",")) panelOrder = obj;
     } catch(e){ /* ignore */ }
   }
 
@@ -3012,185 +3013,106 @@ img{max-width:100%;}
     var handle2 = document.getElementById("resize-handle-2");
     if (handle1) handle1.style.order = 1;
     if (handle2) handle2.style.order = 3;
-    layoutEl.style.setProperty("--w-col1", clampFr(panelWidths[panelOrder[0]]).toFixed(3) + "fr");
-    layoutEl.style.setProperty("--w-col2", clampFr(panelWidths[panelOrder[1]]).toFixed(3) + "fr");
+    var id1 = panelOrder[0], id2 = panelOrder[1];
+    if (typeof panelWidthsPx[id1] === "number") layoutEl.style.setProperty("--w-col1", clampPx(panelWidthsPx[id1]) + "px");
+    else layoutEl.style.setProperty("--w-col1", panelWidths[id1] + "fr");
+    if (typeof panelWidthsPx[id2] === "number") layoutEl.style.setProperty("--w-col2", clampPx(panelWidthsPx[id2]) + "px");
+    else layoutEl.style.setProperty("--w-col2", panelWidths[id2] + "fr");
   }
 
-  // Drag & drop reordering of the three panels themselves — same mechanic
-  // (native HTML5 drag & drop, a dedicated grip handle) already used for
-  // reordering tracks within a setlist and reordering the setlists list,
-  // just applied to the three-panel row instead of a vertical list: the
-  // drop side (left/right half of the hovered panel) decides whether the
-  // dragged panel is inserted before or after it.
   var panelDragId = null;
   var panelDragSection = null;
-
   function panelIdForSection(section){
     var found = null;
     DEFAULT_PANEL_ORDER.forEach(function(id){ if (panelSectionEl(id) === section) found = id; });
     return found;
   }
-
   function clearPanelDropTargets(){
-    DEFAULT_PANEL_ORDER.forEach(function(id){
-      var section = panelSectionEl(id);
-      if (section) section.classList.remove("panel-drop-target");
-    });
+    DEFAULT_PANEL_ORDER.forEach(function(id){ var section = panelSectionEl(id); if (section) section.classList.remove("panel-drop-target"); });
   }
-
   function initPanelReorder(){
     DEFAULT_PANEL_ORDER.forEach(function(id){
-      var section = panelSectionEl(id);
-      var header = section ? section.querySelector(".panel-header") : null;
+      var section = panelSectionEl(id), header = section ? section.querySelector(".panel-header") : null;
       if (!header || header.querySelector(".panel-drag-handle")) return;
       var actions = header.querySelector(".panel-header-actions");
-      if (actions){
-        actions.insertAdjacentHTML("beforeend", panelDragHandleHtml(id));
-      } else {
-        header.insertAdjacentHTML("beforeend", '<span class="panel-header-actions">' + panelDragHandleHtml(id) + '</span>');
-      }
+      if (actions) actions.insertAdjacentHTML("beforeend", panelDragHandleHtml(id));
+      else header.insertAdjacentHTML("beforeend", '<span class="panel-header-actions">' + panelDragHandleHtml(id) + '</span>');
     });
     var layoutEl = document.querySelector(".layout");
     layoutEl.addEventListener("dragstart", function(e){
       var handle = e.target.closest && e.target.closest(".panel-drag-handle");
       if (!handle) return;
-      panelDragId = handle.getAttribute("data-panel");
-      panelDragSection = panelSectionEl(panelDragId);
-      if (panelDragSection) {
-        panelDragSection.classList.add("panel-dragging");
-        // Toon het volledige blok als sleepvoorbeeld, niet alleen het handvat.
-        try {
-          var dragPreview = panelDragSection.cloneNode(true);
-          dragPreview.classList.remove("panel-dragging", "panel-drop-target");
-          dragPreview.style.position = "absolute";
-          dragPreview.style.left = "-10000px";
-          dragPreview.style.top = "0";
-          dragPreview.style.width = panelDragSection.getBoundingClientRect().width + "px";
-          dragPreview.style.height = panelDragSection.getBoundingClientRect().height + "px";
-          dragPreview.style.opacity = "1";
-          dragPreview.style.pointerEvents = "none";
-          document.body.appendChild(dragPreview);
-          e.dataTransfer.setDragImage(dragPreview, 24, 24);
-          setTimeout(function(){
-            if (dragPreview.parentNode) dragPreview.parentNode.removeChild(dragPreview);
-          }, 0);
-        } catch(err) {}
-      }
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("application/x-panel-reorder", panelDragId);
+      panelDragId = handle.getAttribute("data-panel"); panelDragSection = panelSectionEl(panelDragId);
+      if (panelDragSection) panelDragSection.classList.add("panel-dragging");
+      e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("application/x-panel-reorder", panelDragId);
     });
-    // dragend always fires after drop (or after a cancelled drag), so it's
-    // the single place that cleans up the dragging/highlight classes —
-    // using the section captured at dragstart rather than panelDragId,
-    // since the drop handler below already clears panelDragId itself.
     layoutEl.addEventListener("dragend", function(){
       if (panelDragSection) panelDragSection.classList.remove("panel-dragging");
-      clearPanelDropTargets();
-      panelDragId = null;
-      panelDragSection = null;
+      clearPanelDropTargets(); panelDragId = null; panelDragSection = null;
     });
     layoutEl.addEventListener("dragover", function(e){
       if (!panelDragId) return;
-      var types = e.dataTransfer.types;
-      var hasReorder = Array.prototype.indexOf.call(types, "application/x-panel-reorder") !== -1;
-      if (!hasReorder) return;
-      var targetSection = e.target.closest && e.target.closest(".panel");
-      if (!targetSection) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      var targetId = panelIdForSection(targetSection);
-      clearPanelDropTargets();
-      if (!targetId || targetId === panelDragId) return;
-      targetSection.classList.add("panel-drop-target");
+      if (Array.prototype.indexOf.call(e.dataTransfer.types, "application/x-panel-reorder") === -1) return;
+      var targetSection = e.target.closest && e.target.closest(".panel"); if (!targetSection) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = "move"; clearPanelDropTargets();
+      var targetId = panelIdForSection(targetSection); if (targetId && targetId !== panelDragId) targetSection.classList.add("panel-drop-target");
     });
     layoutEl.addEventListener("drop", function(e){
       if (!panelDragId) return;
-      var types = e.dataTransfer.types;
-      var hasReorder = Array.prototype.indexOf.call(types, "application/x-panel-reorder") !== -1;
-      if (!hasReorder) return;
-      var targetSection = e.target.closest && e.target.closest(".panel");
-      clearPanelDropTargets();
-      if (!targetSection){ panelDragId = null; return; }
-      e.preventDefault();
-      var targetId = panelIdForSection(targetSection);
-      var draggedId = panelDragId;
-      panelDragId = null;
-      if (!targetId || targetId === draggedId) return;
-      var rect = targetSection.getBoundingClientRect();
-      var before = e.clientX < rect.left + rect.width / 2;
-      var copy = panelOrder.slice();
-      var fromIdx = copy.indexOf(draggedId);
-      if (fromIdx === -1) return;
-      copy.splice(fromIdx, 1);
-      var insertAt = copy.indexOf(targetId);
-      if (insertAt === -1) return;
-      if (!before) insertAt += 1;
-      copy.splice(insertAt, 0, draggedId);
-      panelOrder = copy;
-      savePanelOrder();
-      applyPanelLayout();
+      if (Array.prototype.indexOf.call(e.dataTransfer.types, "application/x-panel-reorder") === -1) return;
+      var targetSection = e.target.closest && e.target.closest(".panel"); clearPanelDropTargets(); if (!targetSection){ panelDragId=null; return; }
+      e.preventDefault(); var targetId=panelIdForSection(targetSection), draggedId=panelDragId; panelDragId=null;
+      if (!targetId || targetId===draggedId) return;
+      var rect=targetSection.getBoundingClientRect(), before=e.clientX < rect.left+rect.width/2, copy=panelOrder.slice(), fromIdx=copy.indexOf(draggedId);
+      if (fromIdx===-1) return; copy.splice(fromIdx,1); var insertAt=copy.indexOf(targetId); if (insertAt===-1) return;
+      if (!before) insertAt+=1; copy.splice(insertAt,0,draggedId); panelOrder=copy; savePanelOrder(); applyPanelLayout();
     });
   }
 
   function initResizers(){
     var layoutEl = document.querySelector(".layout");
-
     function slotEl(slotIndex){ return panelSectionEl(panelOrder[slotIndex]); }
-
-    function applyRatiosFromCurrentSizes(){
-      var edPx = panelPx(slotEl(2));
-      if (edPx <= 0) return;
-      var fr1 = clampFr(panelPx(slotEl(0)) / edPx);
-      var fr2 = clampFr(panelPx(slotEl(1)) / edPx);
-      panelWidths[panelOrder[0]] = fr1;
-      panelWidths[panelOrder[1]] = fr2;
-      layoutEl.style.setProperty("--w-col1", fr1.toFixed(3) + "fr");
-      layoutEl.style.setProperty("--w-col2", fr2.toFixed(3) + "fr");
+    function lockCurrentWidths(){
+      [0,1].forEach(function(i){
+        var id=panelOrder[i], px=panelPx(slotEl(i));
+        if (px>0) panelWidthsPx[id]=clampPx(px);
+      });
+      if (typeof panelWidthsPx[panelOrder[0]] === "number") layoutEl.style.setProperty("--w-col1", panelWidthsPx[panelOrder[0]]+"px");
+      if (typeof panelWidthsPx[panelOrder[1]] === "number") layoutEl.style.setProperty("--w-col2", panelWidthsPx[panelOrder[1]]+"px");
       savePanelWidths();
     }
-
-    function dynamicMaxPx(){
-      var reserve = panelPx(slotEl(2)) + 14 + 14 + 320 + 32; // remainder column + handles + min width + gutters
-      var avail = window.innerWidth - reserve;
-      return Math.max(RESIZE_MIN_PX, Math.min(RESIZE_MAX_PX, avail));
+    function dynamicMaxPx(slotIndex){
+      var other = slotIndex === 0 ? panelPx(slotEl(1)) : panelPx(slotEl(0));
+      var reserve = other + 14 + 14 + 320 + 32;
+      return Math.max(RESIZE_MIN_PX, Math.min(RESIZE_MAX_PX, window.innerWidth-reserve));
     }
-
     function setupResizeHandle(handle, slotIndex, colVar){
       if (!handle) return;
-      var dragging = false, startX = 0, startWidth = 0;
-      handle.addEventListener("pointerdown", function(e){
-        if (window.innerWidth < STACK_BREAKPOINT) return;
-        dragging = true; startX = e.clientX; startWidth = panelPx(slotEl(slotIndex));
-        try{ handle.setPointerCapture(e.pointerId); } catch(err){}
-        document.body.style.userSelect = "none";
+      var dragging=false,startX=0,startWidth=0;
+      handle.addEventListener("pointerdown",function(e){
+        if(window.innerWidth<STACK_BREAKPOINT)return;
+        lockCurrentWidths(); dragging=true; startX=e.clientX; startWidth=panelPx(slotEl(slotIndex));
+        try{handle.setPointerCapture(e.pointerId);}catch(err){} document.body.style.userSelect="none";
       });
-      handle.addEventListener("pointermove", function(e){
-        if (!dragging) return;
-        var max = dynamicMaxPx();
-        var next = Math.max(RESIZE_MIN_PX, Math.min(max, startWidth + (e.clientX - startX)));
-        layoutEl.style.setProperty(colVar, next + "px");
+      handle.addEventListener("pointermove",function(e){
+        if(!dragging)return;
+        var next=Math.max(RESIZE_MIN_PX,Math.min(dynamicMaxPx(slotIndex),startWidth+(e.clientX-startX)));
+        layoutEl.style.setProperty(colVar,next+"px");
       });
       function endDrag(){
-        if (!dragging) return;
-        dragging = false;
-        document.body.style.userSelect = "";
-        applyRatiosFromCurrentSizes();
+        if(!dragging)return; dragging=false; document.body.style.userSelect="";
+        var id=panelOrder[slotIndex], px=panelPx(slotEl(slotIndex)); panelWidthsPx[id]=clampPx(px); savePanelWidths();
       }
-      handle.addEventListener("pointerup", endDrag);
-      handle.addEventListener("pointercancel", endDrag);
-      handle.addEventListener("keydown", function(e){
-        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-        e.preventDefault();
-        var step = 24;
-        var max = dynamicMaxPx();
-        var next = Math.max(RESIZE_MIN_PX, Math.min(max, panelPx(slotEl(slotIndex)) + (e.key === "ArrowRight" ? step : -step)));
-        layoutEl.style.setProperty(colVar, next + "px");
-        applyRatiosFromCurrentSizes();
+      handle.addEventListener("pointerup",endDrag); handle.addEventListener("pointercancel",endDrag);
+      handle.addEventListener("keydown",function(e){
+        if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return; e.preventDefault(); lockCurrentWidths();
+        var next=Math.max(RESIZE_MIN_PX,Math.min(dynamicMaxPx(slotIndex),panelPx(slotEl(slotIndex))+(e.key==="ArrowRight"?24:-24)));
+        layoutEl.style.setProperty(colVar,next+"px"); panelWidthsPx[panelOrder[slotIndex]]=clampPx(next); savePanelWidths();
       });
     }
-
-    setupResizeHandle(document.getElementById("resize-handle-1"), 0, "--w-col1");
-    setupResizeHandle(document.getElementById("resize-handle-2"), 1, "--w-col2");
+    lockCurrentWidths();
+    setupResizeHandle(document.getElementById("resize-handle-1"),0,"--w-col1");
+    setupResizeHandle(document.getElementById("resize-handle-2"),1,"--w-col2");
   }
 
   function initPanelLayout(){
