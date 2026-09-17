@@ -255,7 +255,7 @@ img{max-width:100%;}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
   .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
 
-  .panel-header-actions{display:inline-flex; align-items:center; gap:14px; margin-left:auto;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
+  .panel-header-actions{display:inline-flex; align-items:center; gap:14px; margin-left:auto;}\n  .setlist-filter-below{align-self:flex-start;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
   .panel-drag-handle{
     display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted);
     cursor:grab; padding:4px; border-radius:6px; flex:none;
@@ -363,6 +363,9 @@ img{max-width:100%;}
   }
 
   .editor-header{display:flex; flex-direction:column; gap:10px;}
+  .editor-title-row{display:flex; align-items:center; gap:8px;}
+  .editor-title-row #setlist-name-input{flex:1; min-width:0;}
+  .editor-title-row #open-add-existing-track-btn{margin-left:auto; flex:none;}
   #setlist-name-input{
     font-family:"Poppins",sans-serif; font-size:1.4rem; font-weight:700; border:1px solid transparent;
     background:transparent; color:var(--text); padding:4px 6px; border-radius:6px; width:100%;
@@ -396,9 +399,6 @@ img{max-width:100%;}
   .setlist-track-item.dragging{opacity:.4;}
   .setlist-track-item.missing{border-style:dashed; color:var(--text-muted);}
   .track-position{width:22px; text-align:right; color:var(--text); font-size:1.05rem; font-weight:700; flex:none;}
-  .track-reorder{display:flex; flex-direction:column; flex:none;}
-  .track-reorder .icon-btn{width:22px; height:18px;}
-  .track-reorder svg{width:12px; height:12px;}
   .drop-indicator{height:3px; border-radius:2px; background:var(--accent); margin:0 4px;}
   .drop-hint{text-align:center; color:var(--text-muted); font-size:.85rem; padding:14px 6px;}
 
@@ -474,6 +474,17 @@ img{max-width:100%;}
     </form>
   </div>
 
+  <div id="export-format-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-label="Downloadformaat kiezen">
+    <div class="modal-card">
+      <h2>Downloadformaat kiezen</h2>
+      <p class="hint">Kies het formaat waarin je de actieve setlist wilt downloaden.</p>
+      <div class="modal-card-actions">
+        <button type="button" class="btn btn-ghost" data-export-format="pdf">PDF</button>
+        <button type="button" class="btn btn-accent" data-export-format="docx">Word</button>
+      </div>
+    </div>
+  </div>
+
   <div id="add-existing-track-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-label="Nummer toevoegen aan setlist">
     <div class="modal-card modal-card-wide">
       <h2>Nummer toevoegen aan setlist</h2>
@@ -515,16 +526,16 @@ img{max-width:100%;}
       <div class="panel-header">
         <h2>Setlists</h2>
         <span class="panel-header-actions">
-          <label class="setlist-filter-toggle" title="Verberg setlists waarvan de datum voorbij is">
-            <input type="checkbox" id="show-future-setlists-only">
-            <span>Toekomstige setlists</span>
-          </label>
           <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-            
+            Nieuw
           </button>
         </span>
       </div>
+      <label class="setlist-filter-toggle setlist-filter-below" title="Verberg setlists waarvan de datum voorbij is">
+        <input type="checkbox" id="show-future-setlists-only">
+        <span>Toekomstige setlists</span>
+      </label>
       <div id="new-setlist-form-slot"></div>
       <div class="setlists-list" id="setlists-list"></div>
     </section>
@@ -533,7 +544,7 @@ img{max-width:100%;}
 
     <section class="panel panel-editor" aria-label="Actieve setlist" id="panel-editor">
       <div class="panel-header">
-        <h2>Actieve setlist</h2>
+        <h2 id="active-setlist-heading">Actieve setlist</h2>
       </div>
       <div id="editor-panel"></div>
     </section>
@@ -1387,7 +1398,8 @@ img{max-width:100%;}
 
   // ---------- render ----------
   function renderStats(){
-    statTracksEl.textContent = tracksMap.size + " " + plural(tracksMap.size, "nummer", "nummers");
+    var songTotal = Array.from(tracksMap.values()).filter(function(t){ return t.genre !== "Praatje"; }).length;
+    statTracksEl.textContent = songTotal + " " + plural(songTotal, "nummer", "nummers");
     statSetlistsEl.textContent = setlistsMap.size + " " + plural(setlistsMap.size, "setlist", "setlists");
   }
 
@@ -1608,6 +1620,8 @@ img{max-width:100%;}
 
   function renderActiveSetlist(){
     var sl = activeSetlistId ? setlistsMap.get(activeSetlistId) : null;
+    var activeHeading = document.getElementById("active-setlist-heading");
+    if (activeHeading) activeHeading.textContent = sl ? (sl.name || "Actieve setlist") : "Actieve setlist";
     if (!sl){
       editorPanelEl.innerHTML = '<div class="editor-empty" id="editor-empty-dropzone"><strong style="font-family:\'Poppins\',sans-serif;font-size:1.1rem;color:var(--text);">Geen setlist geselecteerd</strong><span>Kies een setlist links, maak een nieuwe aan, of sleep een nummer hierheen om er meteen een te starten.</span></div>';
       return;
@@ -1634,10 +1648,6 @@ img{max-width:100%;}
           '</span>' +
           (showProgrammaInLibrary && !missing && t.programma ? '<span class="track-programma mono" title="Programma">' + escapeHtml(t.programma) + '</span>' : '') +
           '<span class="track-duration mono">' + formatDuration(missing ? 0 : t.durationSec) + '</span>' +
-          '<span class="track-reorder">' +
-            '<button type="button" class="icon-btn" data-action="move-up" data-index="' + idx + '" aria-label="Omhoog verplaatsen"' + (idx===0?' disabled':'') + '>' + ICON_UP + '</button>' +
-            '<button type="button" class="icon-btn" data-action="move-down" data-index="' + idx + '" aria-label="Omlaag verplaatsen"' + (idx===trackCount-1?' disabled':'') + '>' + ICON_DOWN + '</button>' +
-          '</span>' +
           '<button type="button" class="icon-btn danger" data-action="remove-track" data-index="' + idx + '" aria-label="Verwijderen uit setlist" title="Verwijderen uit setlist">' + ICON_TRASH + '</button>' +
         '</div>';
     }).join("");
@@ -1648,19 +1658,16 @@ img{max-width:100%;}
 
     editorPanelEl.innerHTML = '' +
       '<div class="editor-header">' +
-        '<input type="text" id="setlist-name-input" value="' + escapeHtml(sl.name) + '" aria-label="Naam van de setlist">' +
+        '<div class="editor-title-row">' +
+          '<input type="text" id="setlist-name-input" value="' + escapeHtml(sl.name) + '" aria-label="Naam van de setlist">' +
+          (tracksMap.size === 0 ? '' :
+            '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
+        '</div>' +
         '<div class="editor-stats">' +
           '<input type="date" id="setlist-date-input" value="' + escapeHtml(sl.date || "") + '" aria-label="Datum van de setlist">' +
-          '<span class="badge">' + count + ' ' + plural(count,'nummer','nummers') + '</span>' +
           '<span class="badge badge-duration">' + formatDuration(total) + '</span>' +
-          (valid
-            ? '<span class="badge ok">Geldige setlist</span>'
-            : '<span class="badge warn">Nog ' + needed + ' ' + plural(needed,'nummer','nummers') + ' nodig (min. 3)</span>') +
           '<span class="editor-actions">' +
-            (tracksMap.size === 0 ? '' :
-              '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
-            '<button type="button" class="btn btn-small" data-action="export-setlist" data-format="pdf"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' PDF</button>' +
-            '<button type="button" class="btn btn-small" data-action="export-setlist" data-format="docx"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Word</button>' +
+            '<button type="button" class="btn btn-small" data-action="export-setlist"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Download</button>' +
           '</span>' +
         '</div>' +
       '</div>' +
@@ -2875,28 +2882,20 @@ img{max-width:100%;}
     }
   });
 
+  var exportFormatModalEl = document.getElementById("export-format-modal");
+  if (exportFormatModalEl){
+    exportFormatModalEl.addEventListener("click", function(e){
+      if (e.target === exportFormatModalEl){ exportFormatModalEl.hidden = true; return; }
+      var btn = e.target.closest && e.target.closest("[data-export-format]");
+      if (!btn || !activeSetlistId) return;
+      exportFormatModalEl.hidden = true;
+      exportSetlist(activeSetlistId, btn.getAttribute("data-export-format"));
+    });
+    exportFormatModalEl.addEventListener("keydown", function(e){ if (e.key === "Escape") exportFormatModalEl.hidden = true; });
+  }
+
   // ---------- event delegation: editor panel ----------
   editorPanelEl.addEventListener("click", function(e){
-    var upBtn = e.target.closest && e.target.closest('[data-action="move-up"]');
-    if (upBtn && !upBtn.disabled){
-      var idxUp = parseInt(upBtn.getAttribute("data-index"), 10);
-      mutateSetlist(activeSetlistId, function(ids){
-        var copy = ids.slice();
-        if (idxUp > 0){ var tmp = copy[idxUp-1]; copy[idxUp-1] = copy[idxUp]; copy[idxUp] = tmp; }
-        return copy;
-      });
-      return;
-    }
-    var downBtn = e.target.closest && e.target.closest('[data-action="move-down"]');
-    if (downBtn && !downBtn.disabled){
-      var idxDown = parseInt(downBtn.getAttribute("data-index"), 10);
-      mutateSetlist(activeSetlistId, function(ids){
-        var copy = ids.slice();
-        if (idxDown < copy.length-1){ var tmp2 = copy[idxDown+1]; copy[idxDown+1] = copy[idxDown]; copy[idxDown] = tmp2; }
-        return copy;
-      });
-      return;
-    }
     var rmBtn = e.target.closest && e.target.closest('[data-action="remove-track"]');
     if (rmBtn){
       var idxRm = parseInt(rmBtn.getAttribute("data-index"), 10);
@@ -2905,7 +2904,8 @@ img{max-width:100%;}
     }
     var exportBtn = e.target.closest && e.target.closest('[data-action="export-setlist"]');
     if (exportBtn && !exportBtn.disabled){
-      exportSetlist(activeSetlistId, exportBtn.getAttribute("data-format"));
+      var formatModal = document.getElementById("export-format-modal");
+      if (formatModal) formatModal.hidden = false;
       return;
     }
     if (e.target.id === "open-add-existing-track-btn" || (e.target.closest && e.target.closest("#open-add-existing-track-btn"))){
