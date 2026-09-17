@@ -249,7 +249,7 @@ img{max-width:100%;}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
   .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
 
-  .panel-header-actions{display:inline-flex; align-items:center; gap:8px; margin-left:auto;}
+  .panel-header-actions{display:inline-flex; align-items:center; gap:8px; margin-left:auto;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.8rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
   .panel-drag-handle{
     display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted);
     cursor:grab; padding:4px; border-radius:6px; flex:none;
@@ -508,6 +508,10 @@ img{max-width:100%;}
       <div class="panel-header">
         <h2>Setlists</h2>
         <span class="panel-header-actions">
+          <label class="setlist-filter-toggle" title="Verberg setlists waarvan de datum voorbij is">
+            <input type="checkbox" id="show-future-setlists-only">
+            <span>Toekomstige setlists</span>
+          </label>
           <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
             Nieuw
@@ -672,6 +676,13 @@ img{max-width:100%;}
 
   // ---------- display settings (per-device) ----------
   var SHOW_PROGRAMMA_KEY = "setlist-studio:show-programma";
+  var SHOW_FUTURE_SETLISTS_KEY = "setlist-studio:show-future-setlists";
+  function loadShowFutureSetlistsSetting(){
+    try{ return window.localStorage.getItem(SHOW_FUTURE_SETLISTS_KEY) === "1"; } catch(e){ return false; }
+  }
+  function saveShowFutureSetlistsSetting(val){
+    try{ window.localStorage.setItem(SHOW_FUTURE_SETLISTS_KEY, val ? "1" : "0"); } catch(e){ /* ignore */ }
+  }
   function loadShowProgrammaSetting(){
     try{ return window.localStorage.getItem(SHOW_PROGRAMMA_KEY) === "1"; } catch(e){ return false; }
   }
@@ -682,6 +693,7 @@ img{max-width:100%;}
   var librarySearchTerm = "";
   var libraryGenreFilters = new Set();
   var showProgrammaInLibrary = loadShowProgrammaSetting();
+  var showFutureSetlistsOnly = loadShowFutureSetlistsSetting();
   var editingTrackId = null;
   var creatingSetlist = false;
   var renamingSetlistId = null;
@@ -1339,6 +1351,12 @@ img{max-width:100%;}
     var sl = setlistsMap.get(id);
     if (!sl) return;
     var newIds = updater(sl.trackIds.slice());
+    var seenTrackIds = new Set();
+    newIds = newIds.filter(function(trackId){
+      if (seenTrackIds.has(trackId)) return false;
+      seenTrackIds.add(trackId);
+      return true;
+    });
     if (usingDb){
       await db.collection("setlists").doc(id).update({trackIds:newIds, updatedAt:Date.now()});
     } else {
@@ -1416,10 +1434,18 @@ img{max-width:100%;}
     updateGenreControls();
 
     var term = librarySearchTerm.trim().toLowerCase();
+    var activeTrackIds = new Set();
+    if (activeSetlistId){
+      var activeSl = setlistsMap.get(activeSetlistId);
+      if (activeSl && Array.isArray(activeSl.trackIds)){
+        activeSl.trackIds.forEach(function(id){ activeTrackIds.add(id); });
+      }
+    }
     var list = sortedTracks().filter(function(t){
+      var alreadyInActiveSetlist = activeTrackIds.has(t.id);
       var matchesTerm = !term || t.title.toLowerCase().indexOf(term) !== -1 || (t.artist||"").toLowerCase().indexOf(term) !== -1;
       var matchesGenre = libraryGenreFilters.size === 0 || libraryGenreFilters.has(t.genre || "");
-      return matchesTerm && matchesGenre;
+      return !alreadyInActiveSetlist && matchesTerm && matchesGenre;
     });
 
     if (tracksMap.size === 0){
@@ -1445,6 +1471,7 @@ img{max-width:100%;}
             '<input type="text" class="input track-edit-programma" id="edit-programma-' + t.id + '" value="' + escapeHtml(t.programma || "") + '" aria-label="Programma bewerken" placeholder="Programma">' +
             '<input type="text" class="input input-duration mono track-edit-duration" id="edit-duration-' + t.id + '" value="' + formatDuration(t.durationSec) + '" aria-label="Duur bewerken (mm:ss)">' +
             '<button type="button" class="icon-btn" data-action="save-track-edit" data-id="' + t.id + '" aria-label="Wijzigingen opslaan" title="Opslaan">' + ICON_CHECK + '</button>' +
+            '<button type="button" class="icon-btn danger' + (pendingConfirm.has("track:" + t.id) ? " confirming" : "") + '" data-action="delete-track" data-id="' + t.id + '" aria-label="' + (pendingConfirm.has("track:" + t.id) ? "Klik nogmaals om te bevestigen" : "Nummer verwijderen") + '" title="' + (pendingConfirm.has("track:" + t.id) ? "Klik nogmaals om te verwijderen" : "Nummer verwijderen") + '">' + ICON_TRASH + '</button>' +
             '<button type="button" class="icon-btn" data-action="cancel-track-edit" data-id="' + t.id + '" aria-label="Bewerken annuleren" title="Annuleren">' + ICON_X + '</button>' +
           '</div>';
       }
@@ -1461,7 +1488,6 @@ img{max-width:100%;}
           '<span class="track-duration mono">' + formatDuration(t.durationSec) + '</span>' +
           '<button type="button" class="icon-btn" data-action="edit-track" data-id="' + t.id + '" aria-label="Nummer bewerken" title="Bewerken">' + ICON_PENCIL + '</button>' +
           '<button type="button" class="icon-btn quick-add" data-action="quick-add" data-id="' + t.id + '" aria-label="Toevoegen aan actieve setlist" title="Toevoegen aan actieve setlist">' + ICON_PLUS + '</button>' +
-          '<button type="button" class="icon-btn danger' + (confirming ? ' confirming' : '') + '" data-action="delete-track" data-id="' + t.id + '" aria-label="' + (confirming ? "Klik nogmaals om te bevestigen" : "Nummer verwijderen") + '" title="' + (confirming ? "Klik nogmaals om te verwijderen" : "Verwijderen") + '">' + ICON_TRASH + '</button>' +
         '</div>';
     }).join("");
 
@@ -1514,9 +1540,18 @@ img{max-width:100%;}
   function renderSetlistsList(){
     if (renamingSetlistId && !setlistsMap.has(renamingSetlistId)) renamingSetlistId = null;
     renderNewSetlistForm();
+    var filterCheckbox = document.getElementById("show-future-setlists-only");
+    if (filterCheckbox) filterCheckbox.checked = showFutureSetlistsOnly;
     var items = sortSetlists(Array.from(setlistsMap.values()));
+    if (showFutureSetlistsOnly){
+      var today = new Date();
+      var todayKey = today.getFullYear() + "-" + String(today.getMonth()+1).padStart(2,"0") + "-" + String(today.getDate()).padStart(2,"0");
+      items = items.filter(function(sl){ return !sl.date || sl.date >= todayKey; });
+    }
     if (items.length === 0){
-      setlistsListEl.innerHTML = '<div class="empty-state"><strong>Nog geen setlists</strong>Klik op “Nieuw” om je eerste setlist te maken.</div>';
+      setlistsListEl.innerHTML = showFutureSetlistsOnly
+        ? '<div class="empty-state"><strong>Geen toekomstige setlists</strong>Er zijn geen setlists met een datum vanaf vandaag.</div>'
+        : '<div class="empty-state"><strong>Nog geen setlists</strong>Klik op “Nieuw” om je eerste setlist te maken.</div>';
       return;
     }
     setlistsListEl.innerHTML = items.map(function(sl){
@@ -1564,13 +1599,16 @@ img{max-width:100%;}
     var valid = count >= 3;
     var needed = Math.max(0, 3 - count);
 
+    var songPosition = 0;
     var itemsHtml = sl.trackIds.map(function(tid, idx){
       var t = tracksMap.get(tid);
       var missing = !t;
+      var isPraatje = !missing && t.genre === "Praatje";
+      var position = isPraatje ? "" : (++songPosition);
       return '' +
         '<div class="setlist-track-item' + (missing ? ' missing' : '') + '" draggable="true" data-index="' + idx + '">' +
           '<span class="drag-handle" aria-hidden="true">' + ICON_HANDLE + '</span>' +
-          '<span class="track-position mono">' + (idx+1) + '</span>' +
+          '<span class="track-position mono">' + position + '</span>' +
           '<span class="track-info">' +
             '<span class="track-title">' + (missing ? '(verwijderd nummer)' : escapeHtml(t.title)) + '</span>' +
             (!missing && t.artist ? '<span class="track-artist">' + escapeHtml(t.artist) + '</span>' : '') +
@@ -1581,7 +1619,7 @@ img{max-width:100%;}
             '<button type="button" class="icon-btn" data-action="move-up" data-index="' + idx + '" aria-label="Omhoog verplaatsen"' + (idx===0?' disabled':'') + '>' + ICON_UP + '</button>' +
             '<button type="button" class="icon-btn" data-action="move-down" data-index="' + idx + '" aria-label="Omlaag verplaatsen"' + (idx===trackCount-1?' disabled':'') + '>' + ICON_DOWN + '</button>' +
           '</span>' +
-          '<button type="button" class="icon-btn danger" data-action="remove-track" data-index="' + idx + '" aria-label="Verwijderen uit setlist">' + ICON_X + '</button>' +
+          '<button type="button" class="icon-btn danger" data-action="remove-track" data-index="' + idx + '" aria-label="Verwijderen uit setlist" title="Verwijderen uit setlist">' + ICON_TRASH + '</button>' +
         '</div>';
     }).join("");
 
@@ -1602,8 +1640,8 @@ img{max-width:100%;}
           '<span class="editor-actions">' +
             (tracksMap.size === 0 ? '' :
               '<button type="button" class="btn btn-accent" id="open-add-existing-track-btn" aria-label="Nummer toevoegen aan setlist" title="Nummer toevoegen aan setlist">' + ICON_PLUS + '</button>') +
-            '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="pdf"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' PDF</button>' +
-            '<button type="button" class="btn btn-ghost btn-small" data-action="export-setlist" data-format="docx"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Word</button>' +
+            '<button type="button" class="btn btn-small" data-action="export-setlist" data-format="pdf"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' PDF</button>' +
+            '<button type="button" class="btn btn-small" data-action="export-setlist" data-format="docx"' + (valid ? '' : ' disabled title="Minimaal 3 nummers nodig om te exporteren"') + '>' + ICON_DOWNLOAD + ' Word</button>' +
           '</span>' +
         '</div>' +
       '</div>' +
@@ -2439,7 +2477,11 @@ img{max-width:100%;}
     var addBtn = e.target.closest && e.target.closest('[data-action="quick-add"]');
     if (addBtn){
       if (!activeSetlistId){ showBanner("Selecteer eerst een setlist rechts, of maak er een aan.", "warn"); return; }
-      mutateSetlist(activeSetlistId, function(ids){ ids.push(addBtn.getAttribute("data-id")); return ids; });
+      mutateSetlist(activeSetlistId, function(ids){
+        var id = addBtn.getAttribute("data-id");
+        if (ids.indexOf(id) === -1) ids.push(id);
+        return ids;
+      });
       return;
     }
     var editBtn = e.target.closest && e.target.closest('[data-action="edit-track"]');
@@ -2615,7 +2657,13 @@ img{max-width:100%;}
     var listEl = document.getElementById("add-existing-track-list");
     if (!listEl) return;
     var term = addExistingTrackSearchTerm.trim().toLowerCase();
+    var existingIds = new Set();
+    if (activeSetlistId){
+      var activeSl = setlistsMap.get(activeSetlistId);
+      if (activeSl && Array.isArray(activeSl.trackIds)) activeSl.trackIds.forEach(function(id){ existingIds.add(id); });
+    }
     var items = sortedTracks().filter(function(t){
+      if (existingIds.has(t.id)) return false;
       if (!term) return true;
       return (t.title + " " + (t.artist||"") + " " + (t.genre||"")).toLowerCase().indexOf(term) !== -1;
     });
@@ -2655,7 +2703,10 @@ img{max-width:100%;}
       var item = e.target.closest && e.target.closest(".picker-item");
       if (item && activeSetlistId){
         var trackId = item.getAttribute("data-id");
-        mutateSetlist(activeSetlistId, function(ids){ ids.push(trackId); return ids; });
+        mutateSetlist(activeSetlistId, function(ids){
+          if (ids.indexOf(trackId) === -1) ids.push(trackId);
+          return ids;
+        });
       }
     });
     addExistingTrackModalEl.addEventListener("keydown", function(e){
@@ -2718,6 +2769,13 @@ img{max-width:100%;}
     // (post-removal) and needs no further adjustment.
     copy.splice(idx, 0, moved);
     reorderSetlistsManual(copy);
+  });
+  setlistsPanel.addEventListener("change", function(e){
+    if (e.target.id === "show-future-setlists-only"){
+      showFutureSetlistsOnly = !!e.target.checked;
+      saveShowFutureSetlistsSetting(showFutureSetlistsOnly);
+      renderSetlistsList();
+    }
   });
   setlistsPanel.addEventListener("click", function(e){
     if (e.target.id === "new-setlist-btn" || (e.target.closest && e.target.closest("#new-setlist-btn"))){
