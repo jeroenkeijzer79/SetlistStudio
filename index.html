@@ -1091,7 +1091,7 @@ img{max-width:100%;}
       setlistsMap.clear();
       snap.docs.forEach(function(d){ setlistsMap.set(d.id, Object.assign({id:d.id}, d.data())); });
       if (activeSetlistId && !setlistsMap.has(activeSetlistId)) activeSetlistId = null;
-      renderSetlistsList(); renderActiveSetlist(); renderStats();
+      renderSetlistsList(); renderActiveSetlist(); renderLibrary(); renderStats();
     }, function(){ showBanner("De setlists konden niet worden geladen. Probeer de pagina te vernieuwen.", "warn"); });
   }
 
@@ -1291,6 +1291,7 @@ img{max-width:100%;}
       var ref = await db.collection("setlists").add(data);
       activeSetlistId = ref.id;
       renderActiveSetlist();
+      renderLibrary();
     } else {
       var id = uid();
       setlistsMap.set(id, Object.assign({id:id}, data));
@@ -1309,6 +1310,7 @@ img{max-width:100%;}
       var ref = await db.collection("setlists").add(data);
       activeSetlistId = ref.id;
       renderActiveSetlist();
+      renderLibrary();
     } else {
       var id = uid();
       setlistsMap.set(id, Object.assign({id:id}, data));
@@ -2825,7 +2827,7 @@ img{max-width:100%;}
     var row = e.target.closest && e.target.closest('[data-action="select-setlist"]');
     if (row){
       activeSetlistId = row.getAttribute("data-id");
-      renderSetlistsList(); renderActiveSetlist();
+      renderSetlistsList(); renderActiveSetlist(); renderLibrary();
     }
   });
   function commitSetlistRename(id){
@@ -2852,7 +2854,7 @@ img{max-width:100%;}
     if (row && (e.key === "Enter" || e.key === " ")){
       e.preventDefault();
       activeSetlistId = row.getAttribute("data-id");
-      renderSetlistsList(); renderActiveSetlist();
+      renderSetlistsList(); renderActiveSetlist(); renderLibrary();
     }
   });
   setlistsPanel.addEventListener("submit", function(e){
