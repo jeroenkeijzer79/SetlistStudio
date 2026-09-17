@@ -255,7 +255,7 @@ img{max-width:100%;}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
   .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
 
-  .panel-header-actions{display:inline-flex; align-items:center; gap:8px; margin-left:auto;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
+  .panel-header-actions{display:inline-flex; align-items:center; gap:14px; margin-left:auto;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
   .panel-drag-handle{
     display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted);
     cursor:grab; padding:4px; border-radius:6px; flex:none;
@@ -263,7 +263,7 @@ img{max-width:100%;}
   .panel-drag-handle:hover{background:var(--surface-2); color:var(--text);}
   .panel-drag-handle:active{cursor:grabbing;}
   .panel-drag-handle svg{width:14px; height:18px;}
-  .panel.panel-dragging{opacity:.5;}
+  .panel.panel-dragging{opacity:.92; box-shadow:0 12px 32px rgba(0,0,0,.5); outline:2px solid var(--accent); outline-offset:-2px;}
   .panel.panel-drop-target{outline:2px dashed var(--accent); outline-offset:-3px;}
 
   .input{
@@ -521,6 +521,7 @@ img{max-width:100%;}
           </label>
           <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Nieuw
           </button>
         </span>
       </div>
@@ -3056,7 +3057,26 @@ img{max-width:100%;}
       if (!handle) return;
       panelDragId = handle.getAttribute("data-panel");
       panelDragSection = panelSectionEl(panelDragId);
-      if (panelDragSection) panelDragSection.classList.add("panel-dragging");
+      if (panelDragSection) {
+        panelDragSection.classList.add("panel-dragging");
+        // Toon het volledige blok als sleepvoorbeeld, niet alleen het handvat.
+        try {
+          var dragPreview = panelDragSection.cloneNode(true);
+          dragPreview.classList.remove("panel-dragging", "panel-drop-target");
+          dragPreview.style.position = "absolute";
+          dragPreview.style.left = "-10000px";
+          dragPreview.style.top = "0";
+          dragPreview.style.width = panelDragSection.getBoundingClientRect().width + "px";
+          dragPreview.style.height = panelDragSection.getBoundingClientRect().height + "px";
+          dragPreview.style.opacity = "1";
+          dragPreview.style.pointerEvents = "none";
+          document.body.appendChild(dragPreview);
+          e.dataTransfer.setDragImage(dragPreview, 24, 24);
+          setTimeout(function(){
+            if (dragPreview.parentNode) dragPreview.parentNode.removeChild(dragPreview);
+          }, 0);
+        } catch(err) {}
+      }
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("application/x-panel-reorder", panelDragId);
     });
