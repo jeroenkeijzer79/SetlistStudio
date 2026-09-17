@@ -59,7 +59,7 @@ img{max-width:100%;}
   .app{display:flex; flex-direction:column; gap:18px; width:100%;}
 
   .app-version{
-    position:fixed; right:10px; bottom:6px; z-index:1000;
+    position:fixed; left:50%; bottom:6px; transform:translateX(-50%); z-index:1000;
     font-size:10px; line-height:1; color:var(--text-muted);
     opacity:.65; pointer-events:none; user-select:none;
   }
@@ -255,7 +255,12 @@ img{max-width:100%;}
   .icon-btn.quick-add:hover{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent-strong);}
   .icon-btn:disabled{opacity:.35; cursor:not-allowed; background:transparent;}
 
-  .panel-header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}\n  .setlist-filter-below{align-self:flex-start;}\n  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}\n  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
+  .panel-header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;}
+  .setlists-filters{display:flex; align-items:center; gap:6px;}
+  .setlist-filter-toggle{display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.72rem; white-space:nowrap; cursor:pointer;}
+  .setlist-filter-toggle input{width:16px; height:16px; margin:0; accent-color:var(--accent);}
+  #new-setlist-btn{flex:none; padding:8px 10px; margin-left:auto;}
+  #new-setlist-btn svg{width:16px; height:16px;}
   .panel-drag-handle{
     display:inline-flex; align-items:center; justify-content:center; color:var(--text-muted);
     cursor:grab; padding:4px; border-radius:6px; flex:none;
@@ -525,16 +530,16 @@ img{max-width:100%;}
     <section class="panel panel-setlists" aria-label="Setlists" id="panel-setlists">
       <div class="panel-header">
         <h2>Setlists</h2>
-        <span class="panel-header-actions">
-          <button type="button" class="btn btn-accent btn-small" id="new-setlist-btn" aria-label="Nieuwe setlist" title="Nieuwe setlist">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
-        </span>
       </div>
-      <label class="setlist-filter-toggle setlist-filter-below" title="Verberg setlists waarvan de datum voorbij is">
-        <input type="checkbox" id="show-future-setlists-only">
-        <span>Toekomstige setlists</span>
-      </label>
+      <div class="setlists-filters">
+        <label class="setlist-filter-toggle" title="Verberg setlists waarvan de datum voorbij is">
+          <input type="checkbox" id="show-future-setlists-only">
+          <span>Toekomstige setlists</span>
+        </label>
+        <button type="button" class="btn btn-accent" id="new-setlist-btn" aria-label="Nieuwe setlist" title="Nieuwe setlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
       <div id="new-setlist-form-slot"></div>
       <div class="setlists-list" id="setlists-list"></div>
     </section>
