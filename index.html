@@ -1350,20 +1350,30 @@ img{max-width:100%;}
   async function mutateSetlist(id, updater){
     var sl = setlistsMap.get(id);
     if (!sl) return;
-    var newIds = updater(sl.trackIds.slice());
+    var newIds = updater((sl.trackIds || []).slice());
     var seenTrackIds = new Set();
     newIds = newIds.filter(function(trackId){
       if (seenTrackIds.has(trackId)) return false;
       seenTrackIds.add(trackId);
       return true;
     });
+
+    // Update the in-memory setlist immediately as well. This is important
+    // for the library filter: when a track is added to the active setlist,
+    // renderLibrary() must see the new trackIds regardless of whether the
+    // app uses the local store or Firestore.
+    sl.trackIds = newIds;
+    sl.updatedAt = Date.now();
+
     if (usingDb){
-      await db.collection("setlists").doc(id).update({trackIds:newIds, updatedAt:Date.now()});
+      await db.collection("setlists").doc(id).update({trackIds:newIds, updatedAt:sl.updatedAt});
     } else {
-      sl.trackIds = newIds; sl.updatedAt = Date.now();
       persistLocal();
-      renderSetlistsList(); renderActiveSetlist();
     }
+
+    renderSetlistsList();
+    renderActiveSetlist();
+    renderLibrary();
   }
 
   // ---------- render ----------
